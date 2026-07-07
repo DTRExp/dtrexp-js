@@ -1,10 +1,18 @@
 /**
  *  dtre-js — reference implementation of the DTRE specification.
  *  @see https://github.com/DTRExp/dtre-spec
- *
- *  The public API (parse, validate, DTRE#covers/intersect/next/describe/toRRule)
- *  lands here as it is implemented against the spec's conformance vectors.
  */
+
+export { DTRE, parse, validate } from './DTRE.js';
+export { DTRESyntaxError } from './DTRESyntaxError.js';
+export type {
+  DateInput,
+  IEpochHolder,
+  IEvalOptions,
+  IInterval,
+  IIssue,
+  IValidationResult
+} from './types/index.js';
 
 /** The DTRE specification draft this package implements. */
 export const SPEC_DRAFT = 2;

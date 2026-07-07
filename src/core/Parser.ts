@@ -203,7 +203,11 @@ class Parser {
     this.pos++;
     // 0 is a legal anchor for the 0-based units (H0/4); domain checks catch it elsewhere
     if (span.start === null || span.start < 0) {
-      this.fail('anchorless-stride', 'A stride start must be an explicit non-negative value', opPos);
+      this.fail(
+        'anchorless-stride',
+        'A stride start must be an explicit non-negative value',
+        opPos
+      );
     }
     const interval = this.readInt('a stride interval');
     if (interval < 2) this.fail('stride-interval-min', 'Stride interval must be at least 2', opPos);
@@ -356,6 +360,14 @@ class Parser {
       this.pos++;
       duration = this.readInt('a cadence duration');
       durationUnit = this.readCadenceUnit();
+    }
+    const monthish = (u: CadenceUnit): boolean => u === 'M' || u === 'Y';
+    if (monthish(durationUnit) && !monthish(periodUnit)) {
+      this.fail(
+        'cadence-duration-unit',
+        'A month/year duration requires a month/year period',
+        opPos
+      );
     }
     if (duration < 1 || duration * MAX_DAYS[durationUnit] >= period * MIN_DAYS[periodUnit]) {
       this.fail(
