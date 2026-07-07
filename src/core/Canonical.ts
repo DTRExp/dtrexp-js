@@ -5,6 +5,7 @@ import type {
   IDtreIR,
   IExpressionIR,
   ISelector,
+  ISpan,
   ITimeRange,
   ITimeSelector
 } from '../types/index.js';
@@ -74,9 +75,9 @@ function renderSelector(selector: ISelector): string {
 }
 
 function isFullDomain(selector: ISelector): boolean {
-  return (
-    selector.spans.length === 1 && selector.spans.every((s) => s.start === null && s.end === null)
-  );
+  if (selector.spans.length !== 1) return false;
+  const first = selector.spans[0] as ISpan;
+  return first.start === null && first.end === null;
 }
 
 function renderSpan(span: { start: number | null; end: number | null }): string {

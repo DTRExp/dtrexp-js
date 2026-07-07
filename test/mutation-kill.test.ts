@@ -216,10 +216,23 @@ describe('describe/toString — branch outputs', () => {
   it('renders every toString branch', () => {
     expect(ts('M3')).toBe('M3');
     expect(ts('D*')).toBe('D*');
+    expect(ts('T0900-1800')).toBe('T0900-1800'); // non-wrap T keeps its 'T' prefix
+    expect(ts('T0900-1200,1300-1800')).toBe('T0900-1200,1300-1800'); // multi-range join + separator
+    expect(ts('T120000-130000')).toBe('T1200-1300'); // whole-hour bounds drop the seconds
     expect(ts('T093015-093016')).toBe('T093015-093016');
     expect(ts('T093015.250-093015.500')).toBe('T093015.250-093015.500');
+    expect(ts('T120000.250-120000.251')).toBe('T120000.250-120000.251'); // ss=0 but frac≠0 → seconds still shown
+    expect(ts('T093015.050-093015.051')).toBe('T093015.050-093015.051'); // frac<100 → needs zero-padding
     expect(ts('20200106/10D/3D')).toBe('20200106/10D/3D');
     expect(ts('20200106/10D')).toBe('20200106/10D');
+    expect(ts('20180120')).toBe('20180120'); // bare date literal
+    expect(ts('09990101')).toBe('09990101'); // year<1000 → needs zero-padding
+  });
+
+  it('drops a full-domain span only when the selector is a lone full domain', () => {
+    expect(ts('M*,5')).toBe('M*,5'); // first span is full-domain but it is a list → not dropped
+    expect(ts('M5-*')).toBe('M5-*'); // open-end span → not full-domain
+    expect(ts('M*-5')).toBe('M*-5'); // open-start span → not full-domain
   });
 });
 
