@@ -1,0 +1,70 @@
+{
+  "name": "dtre-js",
+  "version": "1.0.0",
+  "description": "Reference TypeScript implementation of DTRE — compact date-time range & recursion expressions, evaluated by coverage.",
+  "type": "module",
+  "main": "./lib/index.js",
+  "module": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "files": [
+    "lib",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "lint": "biome check src test",
+    "format": "biome check --write src test",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "pretest": "npm run lint && npm run typecheck",
+    "test": "vitest run",
+    "cover": "vitest run --coverage",
+    "mutation": "stryker run",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": "DTRExp/dtre-js",
+  "homepage": "https://github.com/DTRExp/dtre-js#readme",
+  "bugs": {
+    "url": "https://github.com/DTRExp/dtre-js/issues"
+  },
+  "keywords": [
+    "dtre",
+    "date",
+    "time",
+    "datetime",
+    "range",
+    "recursion",
+    "recurrence",
+    "expression",
+    "schedule",
+    "interval",
+    "coverage",
+    "cron",
+    "rrule",
+    "typescript",
+    "esm"
+  ],
+  "author": "Onur Yıldırım <onur@cutepilot.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "@biomejs/biome": "2.5.2",
+    "@stryker-mutator/core": "9.6.1",
+    "@stryker-mutator/vitest-runner": "9.6.1",
+    "@types/node": "26.1.0",
+    "@vitest/coverage-istanbul": "4.1.10",
+    "biome-config-oy": "1.1.0",
+    "tsconfig-oy": "2.0.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}
