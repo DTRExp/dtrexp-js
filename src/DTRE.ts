@@ -1,5 +1,8 @@
+import { toCanonicalString } from './core/Canonical.js';
+import { describeIR } from './core/Describe.js';
 import { coversInstant } from './core/Evaluator.js';
 import { parseToIR } from './core/Parser.js';
+import { toRRuleString } from './core/RRule.js';
 import { intersectWindow, nextInterval } from './core/Stepper.js';
 import { DTRESyntaxError } from './DTRESyntaxError.js';
 import type {
@@ -64,6 +67,32 @@ export class DTRE {
    */
   next(after: DateInput, opts?: IEvalOptions): IInterval | null {
     return nextInterval(this.ir, toEpochMs(after), opts?.tz ?? 'UTC');
+  }
+
+  /**
+   *  Human-readable description. v1 supports `'en'` only; the parameter is
+   *  reserved for future locales.
+   *
+   *  @example
+   *  parse('E7#-1 M4').describe(); // → 'the last Sunday in April'
+   */
+  describe(locale = 'en'): string {
+    if (locale !== 'en') throw new RangeError(`Unsupported locale: ${locale}`);
+    return describeIR(this.ir);
+  }
+
+  /**
+   *  RFC 5545 RRULE (with `DTSTART` line when anchored) for the losslessly
+   *  mappable subset, else `null`. Constrained cadences require RFC 7529
+   *  (`SKIP=BACKWARD`) on the consuming side.
+   */
+  toRRule(): string | null {
+    return toRRuleString(this.ir);
+  }
+
+  /** Canonical normalized form of the expression. */
+  toString(): string {
+    return toCanonicalString(this.ir);
   }
 
   /** @internal The compiled IR — consumed by the evaluator layers. */
