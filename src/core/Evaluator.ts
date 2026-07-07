@@ -10,6 +10,7 @@ import type {
 } from '../types/index.js';
 import {
   addMonthsConstrain,
+  civilFromDays,
   daysInMonth,
   daysInQuarter,
   daysInYear,
@@ -38,7 +39,12 @@ function coversExpression(expr: IExpressionIR, f: IFields, epochMs: number, tz: 
     return false;
   }
   if (expr.bounds && !matchBounds(expr.bounds, f)) return false;
-  if (expr.cadence && !matchCadence(expr.cadence, f, epochMs, tz)) return false;
+  if (expr.cadence) {
+    const covered = isSubDayCadence(expr.cadence)
+      ? cadenceAbsWindows(expr.cadence, epochMs, epochMs + 1, tz).length > 0
+      : cadencePseudoWindows(expr.cadence, f.pseudo, f.pseudo + 1).length > 0;
+    if (!covered) return false;
+  }
   return true;
 }
 
@@ -46,9 +52,13 @@ function coversExpression(expr: IExpressionIR, f: IFields, epochMs: number, tz: 
 // discrete selectors
 // -------------------------------
 
-function matchSelector(selector: ISelector, f: IFields, present: Set<Unit>): boolean {
-  const value = fieldValue(selector.unit, f, present);
-  const { min, max } = instanceDomain(selector.unit, f, present);
+/** Span/stride/exclusion test of one raw value against its per-instance domain. */
+export function selectorCoversValue(
+  selector: ISelector,
+  value: number,
+  min: number,
+  max: number
+): boolean {
   // negative values count from the end of the parent's actual domain (spec §3/§9.1)
   const resolve = (v: number | null): number | null => (v !== null && v < 0 ? max + 1 + v : v);
 
@@ -64,9 +74,23 @@ function matchSelector(selector: ISelector, f: IFields, present: Set<Unit>): boo
     const end = resolve(span.end) ?? max;
     return value >= start && value <= end;
   });
-  if (selector.exclude) return !inSet;
-  if (!inSet) return false;
+  return selector.exclude ? !inSet : inSet;
+}
+
+export function matchSelector(selector: ISelector, f: IFields, present: Set<Unit>): boolean {
+  const value = fieldValue(selector.unit, f, present);
+  const { min, max } = instanceDomain(selector.unit, f, present);
+  if (!selectorCoversValue(selector, value, min, max)) return false;
   return selector.ordinal === undefined || matchOrdinal(selector.ordinal, f, present);
+}
+
+const DAY_LEVEL_UNITS = 'YQMWDE';
+
+/** Whether the day-level selectors (Y Q M W D E) all pass — sub-day components ignored. */
+export function matchesDayLevel(expr: IExpressionIR, f: IFields, present: Set<Unit>): boolean {
+  return expr.selectors.every(
+    (s) => !DAY_LEVEL_UNITS.includes(s.unit) || matchSelector(s, f, present)
+  );
 }
 
 function fieldValue(unit: Unit, f: IFields, present: Set<Unit>): number {
@@ -99,7 +123,11 @@ function fieldValue(unit: Unit, f: IFields, present: Set<Unit>): number {
   }
 }
 
-function instanceDomain(unit: Unit, f: IFields, present: Set<Unit>): { min: number; max: number } {
+export function instanceDomain(
+  unit: Unit,
+  f: IFields,
+  present: Set<Unit>
+): { min: number; max: number } {
   switch (unit) {
     case 'Y':
       return { min: 1, max: 9999 };
@@ -147,68 +175,84 @@ function matchOrdinal(ordinal: number, f: IFields, present: Set<Unit>): boolean 
 }
 
 // -------------------------------
-// bounds & cadence
+// bounds
 // -------------------------------
 
 /** End of a literal's span, exclusive: whole day, or minute/second with a T-part (spec §6). */
-function literalSpanEnd(literal: IDateLiteral): number {
+export function literalSpanEnd(literal: IDateLiteral): number {
   const spanMs =
     literal.hour === undefined ? MS_PER_DAY : literal.second === undefined ? 60_000 : 1000;
   return literalPseudo(literal) + spanMs;
 }
 
-function matchBounds(bounds: IBounds, f: IFields): boolean {
-  if (bounds.start && f.pseudo < literalPseudo(bounds.start)) return false;
-  if (bounds.end && f.pseudo >= literalSpanEnd(bounds.end)) return false;
-  return true;
+/** The absolute window of a bounds component, in local pseudo-epoch; open ends are ±Infinity. */
+export function boundsPseudoWindow(bounds: IBounds): { lo: number; hi: number } {
+  return {
+    lo: bounds.start ? literalPseudo(bounds.start) : Number.NEGATIVE_INFINITY,
+    hi: bounds.end ? literalSpanEnd(bounds.end) : Number.POSITIVE_INFINITY
+  };
 }
 
-function matchCadence(c: ICadence, f: IFields, epochMs: number, tz: string): boolean {
+function matchBounds(bounds: IBounds, f: IFields): boolean {
+  const { lo, hi } = boundsPseudoWindow(bounds);
+  return f.pseudo >= lo && f.pseudo < hi;
+}
+
+// -------------------------------
+// cadence windows
+// -------------------------------
+
+/** H/m-period cadences run on absolute elapsed time; the rest on calendar arithmetic (§9.3). */
+export function isSubDayCadence(c: ICadence): boolean {
+  return c.periodUnit === 'H' || c.periodUnit === 'm';
+}
+
+/**
+ *  Occurrence windows of a calendar cadence (Y/M/W/D period) overlapping
+ *  `[lo, hi)`, in local pseudo-epoch, constrain arithmetic per spec §9.2.
+ */
+export function cadencePseudoWindows(c: ICadence, lo: number, hi: number): [number, number][] {
   const anchorPseudo = literalPseudo(c.anchor);
-  if (f.pseudo < anchorPseudo) return false;
+  if (hi <= anchorPseudo) return [];
+  const out: [number, number][] = [];
 
   if (c.periodUnit === 'M' || c.periodUnit === 'Y') {
     const periodMonths = c.period * (c.periodUnit === 'Y' ? 12 : 1);
     const anchorMsOfDay =
       anchorPseudo - epochDay(c.anchor.year, c.anchor.month, c.anchor.day) * MS_PER_DAY;
-    const anchorArg = {
-      year: c.anchor.year,
-      month: c.anchor.month,
-      day: c.anchor.day,
-      msOfDay: anchorMsOfDay
-    };
-    const elapsed = monthsBetween(anchorArg, {
-      year: f.year,
-      month: f.month,
-      day: f.day,
-      msOfDay: f.msOfDay
-    });
-    if (elapsed < 0) return false;
-    const k = Math.floor(elapsed / periodMonths);
-    // constrain clamping wobbles occurrence starts — probe the neighborhood
-    for (const kk of [k, k + 1]) {
-      const occ = addMonthsConstrain(
-        c.anchor.year,
-        c.anchor.month,
-        c.anchor.day,
-        kk * periodMonths
-      );
-      const occPseudo = epochDay(occ.year, occ.month, occ.day) * MS_PER_DAY + anchorMsOfDay;
-      if (f.pseudo >= occPseudo && f.pseudo < windowEnd(c, occ, occPseudo, anchorMsOfDay)) {
-        return true;
-      }
+    const loDay = civilFromDays(Math.floor(lo / MS_PER_DAY));
+    const elapsed = monthsBetween(
+      { year: c.anchor.year, month: c.anchor.month, day: c.anchor.day, msOfDay: anchorMsOfDay },
+      { ...loDay, msOfDay: lo - Math.floor(lo / MS_PER_DAY) * MS_PER_DAY }
+    );
+    // constrain clamping wobbles occurrence starts — begin one period early
+    for (let k = Math.max(0, Math.floor(elapsed / periodMonths) - 1); ; k++) {
+      const occ = addMonthsConstrain(c.anchor.year, c.anchor.month, c.anchor.day, k * periodMonths);
+      const start = epochDay(occ.year, occ.month, occ.day) * MS_PER_DAY + anchorMsOfDay;
+      if (start >= hi) break;
+      const end = windowEnd(c, occ, start, anchorMsOfDay);
+      if (end > lo) out.push([start, end]);
     }
-    return false;
+    return out;
   }
 
-  if (c.periodUnit === 'W' || c.periodUnit === 'D') {
-    // calendar-day arithmetic in the evaluation zone == pseudo-local math (spec §9.3)
-    const periodMs = c.period * (c.periodUnit === 'W' ? 7 : 1) * MS_PER_DAY;
-    const rem = (f.pseudo - anchorPseudo) % periodMs;
-    return rem < durationMs(c.duration, c.durationUnit as 'W' | 'D' | 'H' | 'm');
+  const periodMs = c.period * (c.periodUnit === 'W' ? 7 : 1) * MS_PER_DAY;
+  const durMs = durationMs(c.duration, c.durationUnit as 'W' | 'D' | 'H' | 'm');
+  for (let k = Math.max(0, Math.floor((lo - anchorPseudo) / periodMs) - 1); ; k++) {
+    const start = anchorPseudo + k * periodMs;
+    if (start >= hi) break;
+    if (start + durMs > lo) out.push([start, start + durMs]);
   }
+  return out;
+}
 
-  // H/m periods are absolute elapsed time (spec §9.3)
+/** Occurrence windows of an H/m-period cadence overlapping `[lo, hi)`, in absolute epoch ms. */
+export function cadenceAbsWindows(
+  c: ICadence,
+  lo: number,
+  hi: number,
+  tz: string
+): [number, number][] {
   const anchorEpoch = epochFromLocal(
     tz,
     c.anchor.year,
@@ -218,10 +262,16 @@ function matchCadence(c: ICadence, f: IFields, epochMs: number, tz: string): boo
     c.anchor.minute ?? 0,
     c.anchor.second ?? 0
   );
-  const elapsedMs = epochMs - anchorEpoch;
-  if (elapsedMs < 0) return false;
+  if (hi <= anchorEpoch) return [];
   const periodMs = c.period * (c.periodUnit === 'H' ? 3_600_000 : 60_000);
-  return elapsedMs % periodMs < durationMs(c.duration, c.durationUnit as 'W' | 'D' | 'H' | 'm');
+  const durMs = durationMs(c.duration, c.durationUnit as 'W' | 'D' | 'H' | 'm');
+  const out: [number, number][] = [];
+  for (let k = Math.max(0, Math.floor((lo - anchorEpoch) / periodMs) - 1); ; k++) {
+    const start = anchorEpoch + k * periodMs;
+    if (start >= hi) break;
+    if (start + durMs > lo) out.push([start, start + durMs]);
+  }
+  return out;
 }
 
 function windowEnd(

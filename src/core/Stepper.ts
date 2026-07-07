@@ -1,0 +1,273 @@
+import type {
+  IDtreIR,
+  IExpressionIR,
+  IFields,
+  IInterval,
+  ISelector,
+  Unit
+} from '../types/index.js';
+import {
+  civilFromDays,
+  epochDay,
+  epochFromPseudo,
+  fieldsFromCivil,
+  fieldsFromInstant
+} from '../utils/index.js';
+import {
+  boundsPseudoWindow,
+  cadenceAbsWindows,
+  cadencePseudoWindows,
+  isSubDayCadence,
+  literalSpanEnd,
+  matchesDayLevel,
+  selectorCoversValue
+} from './Evaluator.js';
+
+const MS_PER_DAY = 86_400_000;
+/** Scan horizon: coverage is explored through the end of year 9999 (spec Y domain). */
+const HORIZON_PSEUDO = epochDay(10_000, 1, 1) * MS_PER_DAY;
+
+interface IRange {
+  lo: number;
+  hi: number;
+}
+
+/** Per-expression precomputation reused across every scanned day. */
+interface IExprPlan {
+  expr: IExpressionIR;
+  present: Set<Unit>;
+  base: IRange[];
+  hourRanges: IRange[] | null;
+  minuteCovered: boolean[] | null;
+  secondCovered: boolean[] | null;
+}
+
+function planFor(ir: IDtreIR): IExprPlan[] {
+  return ir.expressions.map((expr) => {
+    const hourSel = expr.selectors.find((s) => s.unit === 'H');
+    const minuteSel = expr.selectors.find((s) => s.unit === 'm');
+    const secondSel = expr.selectors.find((s) => s.unit === 's');
+    return {
+      expr,
+      present: new Set(expr.selectors.map((s) => s.unit)),
+      base: expr.time
+        ? sortMerge(expr.time.ranges.map((r) => ({ lo: r.startMs, hi: r.endMs })))
+        : [{ lo: 0, hi: MS_PER_DAY }],
+      hourRanges: hourSel ? unitRanges(hourSel, 24, 3_600_000) : null,
+      minuteCovered: minuteSel ? coveredValues(minuteSel, 60) : null,
+      secondCovered: secondSel ? coveredValues(secondSel, 60) : null
+    };
+  });
+}
+
+function coveredValues(selector: ISelector, count: number): boolean[] {
+  const out = new Array<boolean>(count);
+  for (let v = 0; v < count; v++) out[v] = selectorCoversValue(selector, v, 0, count - 1);
+  return out;
+}
+
+function unitRanges(selector: ISelector, count: number, unitMs: number): IRange[] {
+  const out: IRange[] = [];
+  for (let v = 0; v < count; v++) {
+    if (!selectorCoversValue(selector, v, 0, count - 1)) continue;
+    const last = out[out.length - 1];
+    if (last && last.hi === v * unitMs) last.hi = (v + 1) * unitMs;
+    else out.push({ lo: v * unitMs, hi: (v + 1) * unitMs });
+  }
+  return out;
+}
+
+/** Covered ms-of-day ranges of one expression on one local day (sorted, merged). */
+function dayRanges(plan: IExprPlan, day: number, f: IFields, tz: string): IRange[] {
+  if (!matchesDayLevel(plan.expr, f, plan.present)) return [];
+  const dayLo = day * MS_PER_DAY;
+  let ranges = plan.base;
+  if (plan.hourRanges) ranges = intersectRanges(ranges, plan.hourRanges);
+  if (plan.minuteCovered) ranges = filterCyclic(ranges, plan.minuteCovered, 60_000, 3_600_000);
+  if (plan.secondCovered) ranges = filterCyclic(ranges, plan.secondCovered, 1000, 60_000);
+  if (plan.expr.bounds && ranges.length > 0) {
+    const w = boundsPseudoWindow(plan.expr.bounds);
+    ranges = clipRanges(ranges, w.lo - dayLo, w.hi - dayLo);
+  }
+  const cadence = plan.expr.cadence;
+  if (cadence && ranges.length > 0) {
+    let windows: IRange[];
+    if (isSubDayCadence(cadence)) {
+      // sub-day cadences run on absolute time; map their edges into this local day
+      const loEpoch = epochFromPseudo(tz, dayLo);
+      const hiEpoch = epochFromPseudo(tz, dayLo + MS_PER_DAY);
+      windows = cadenceAbsWindows(cadence, loEpoch, hiEpoch, tz).map(([s, e]) => ({
+        lo: s <= loEpoch ? 0 : fieldsFromInstant(s, tz).pseudo - dayLo,
+        hi: e >= hiEpoch ? MS_PER_DAY : fieldsFromInstant(e, tz).pseudo - dayLo
+      }));
+    } else {
+      windows = cadencePseudoWindows(cadence, dayLo, dayLo + MS_PER_DAY).map(([s, e]) => ({
+        lo: Math.max(0, s - dayLo),
+        hi: Math.min(MS_PER_DAY, e - dayLo)
+      }));
+    }
+    ranges = intersectRanges(ranges, sortMerge(windows));
+  }
+  return ranges;
+}
+
+function dayCoverage(plans: IExprPlan[], day: number, tz: string): IRange[] {
+  const civil = civilFromDays(day);
+  const f = fieldsFromCivil(civil.year, civil.month, civil.day);
+  let covered: IRange[] = [];
+  for (const plan of plans) covered = sortMerge(covered.concat(dayRanges(plan, day, f, tz)));
+  return covered;
+}
+
+/**
+ *  Covered intervals clipped to `[startEpoch, endEpoch)` — always a finite,
+ *  sorted, merged list (spec §9 derived operations).
+ */
+export function intersectWindow(
+  ir: IDtreIR,
+  startEpoch: number,
+  endEpoch: number,
+  tz: string
+): IInterval[] {
+  if (endEpoch <= startEpoch) return [];
+  const lo = fieldsFromInstant(startEpoch, tz).pseudo;
+  const hi = Math.min(fieldsFromInstant(endEpoch, tz).pseudo, HORIZON_PSEUDO);
+  const out: IRange[] = [];
+  const plans = planFor(ir);
+  const lastDay = Math.floor((hi - 1) / MS_PER_DAY);
+  for (let day = Math.floor(lo / MS_PER_DAY); day <= lastDay; day++) {
+    const dayLo = day * MS_PER_DAY;
+    for (const r of dayCoverage(plans, day, tz)) {
+      const s = Math.max(lo, dayLo + r.lo);
+      const e = Math.min(hi, dayLo + r.hi);
+      if (e <= s) continue;
+      const last = out[out.length - 1];
+      if (last && s <= last.hi) last.hi = Math.max(last.hi, e);
+      else out.push({ lo: s, hi: e });
+    }
+  }
+  return out.map((r) => ({
+    start: new Date(epochFromPseudo(tz, r.lo)),
+    end: new Date(epochFromPseudo(tz, r.hi))
+  }));
+}
+
+/**
+ *  The first maximal covered interval starting strictly after `afterEpoch`.
+ *  Coverage containing `afterEpoch` is skipped ("when does it *next* apply").
+ *  Returns `null` when nothing starts before the year-9999 horizon.
+ */
+export function nextInterval(ir: IDtreIR, afterEpoch: number, tz: string): IInterval | null {
+  const plans = planFor(ir);
+  const afterPseudo = fieldsFromInstant(afterEpoch, tz).pseudo;
+
+  // if every union branch is end-bounded, stop scanning at the latest bound
+  let horizon = HORIZON_PSEUDO;
+  if (ir.expressions.every((e) => e.bounds?.end)) {
+    let latest = 0;
+    for (const e of ir.expressions) {
+      if (e.bounds?.end) latest = Math.max(latest, literalSpanEnd(e.bounds.end));
+    }
+    horizon = Math.min(horizon, latest);
+  }
+
+  let skipCursor = -1; // end of the contiguous coverage containing afterEpoch, while chaining
+  let start = -1;
+  let end = -1;
+  for (let day = Math.floor(afterPseudo / MS_PER_DAY); day * MS_PER_DAY < horizon; day++) {
+    const dayLo = day * MS_PER_DAY;
+    for (const r of dayCoverage(plans, day, tz)) {
+      const lo = dayLo + r.lo;
+      const hi = dayLo + r.hi;
+      if (start !== -1) {
+        if (lo === end) {
+          end = hi;
+          continue;
+        }
+        return toInterval(start, Math.min(end, horizon), tz);
+      }
+      if (hi <= afterPseudo) continue;
+      if (skipCursor === -1 && lo <= afterPseudo) {
+        skipCursor = hi; // afterEpoch sits inside this window — skip its chain
+      } else if (skipCursor !== -1 && lo === skipCursor) {
+        skipCursor = hi; // contiguous continuation of the current window
+      } else {
+        start = lo;
+        end = hi;
+      }
+    }
+    if (start !== -1 && end < dayLo + MS_PER_DAY) {
+      return toInterval(start, Math.min(end, horizon), tz);
+    }
+  }
+  return start !== -1 ? toInterval(start, Math.min(end, horizon), tz) : null;
+}
+
+function toInterval(startPseudo: number, endPseudo: number, tz: string): IInterval {
+  return {
+    start: new Date(epochFromPseudo(tz, startPseudo)),
+    end: new Date(epochFromPseudo(tz, endPseudo))
+  };
+}
+
+// -------------------------------
+// range algebra (ms-of-day)
+// -------------------------------
+
+function sortMerge(ranges: IRange[]): IRange[] {
+  const sorted = ranges.filter((r) => r.hi > r.lo).sort((a, b) => a.lo - b.lo);
+  const out: IRange[] = [];
+  for (const r of sorted) {
+    const last = out[out.length - 1];
+    if (last && r.lo <= last.hi) last.hi = Math.max(last.hi, r.hi);
+    else out.push({ lo: r.lo, hi: r.hi });
+  }
+  return out;
+}
+
+function intersectRanges(a: IRange[], b: IRange[]): IRange[] {
+  const out: IRange[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    const ra = a[i] as IRange;
+    const rb = b[j] as IRange;
+    const lo = Math.max(ra.lo, rb.lo);
+    const hi = Math.min(ra.hi, rb.hi);
+    if (hi > lo) out.push({ lo, hi });
+    if (ra.hi <= rb.hi) i++;
+    else j++;
+  }
+  return out;
+}
+
+function clipRanges(ranges: IRange[], lo: number, hi: number): IRange[] {
+  const out: IRange[] = [];
+  for (const r of ranges) {
+    const s = Math.max(r.lo, lo);
+    const e = Math.min(r.hi, hi);
+    if (e > s) out.push({ lo: s, hi: e });
+  }
+  return out;
+}
+
+/** Keeps only the parts of `ranges` whose cyclic slot (e.g. minute-of-hour) is covered. */
+function filterCyclic(
+  ranges: IRange[],
+  covered: boolean[],
+  unitMs: number,
+  cycleMs: number
+): IRange[] {
+  const out: IRange[] = [];
+  for (const r of ranges) {
+    for (let t = Math.floor(r.lo / unitMs) * unitMs; t < r.hi; t += unitMs) {
+      if (!covered[Math.floor((t % cycleMs) / unitMs)]) continue;
+      const lo = Math.max(t, r.lo);
+      const hi = Math.min(t + unitMs, r.hi);
+      const last = out[out.length - 1];
+      if (last && last.hi === lo) last.hi = hi;
+      else out.push({ lo, hi });
+    }
+  }
+  return out;
+}

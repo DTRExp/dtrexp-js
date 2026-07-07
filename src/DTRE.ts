@@ -1,7 +1,15 @@
 import { coversInstant } from './core/Evaluator.js';
 import { parseToIR } from './core/Parser.js';
+import { intersectWindow, nextInterval } from './core/Stepper.js';
 import { DTRESyntaxError } from './DTRESyntaxError.js';
-import type { DateInput, IDtreIR, IEvalOptions, IIssue, IValidationResult } from './types/index.js';
+import type {
+  DateInput,
+  IDtreIR,
+  IEvalOptions,
+  IInterval,
+  IIssue,
+  IValidationResult
+} from './types/index.js';
 
 /**
  *  A parsed, immutable DTRE expression. Construct via {@link parse}; parse once
@@ -31,6 +39,31 @@ export class DTRE {
    */
   covers(instant: DateInput, opts?: IEvalOptions): boolean {
     return coversInstant(this.ir, toEpochMs(instant), opts?.tz ?? 'UTC');
+  }
+
+  /**
+   *  The covered intervals clipped to `[start, end)` — always a finite, sorted,
+   *  merged list of half-open intervals.
+   *
+   *  @example
+   *  parse('M3').intersect('2017-01-01', '2018-01-01');
+   *  // → [ { start: 2017-03-01T00:00:00Z, end: 2017-04-01T00:00:00Z } ]
+   */
+  intersect(start: DateInput, end: DateInput, opts?: IEvalOptions): IInterval[] {
+    return intersectWindow(this.ir, toEpochMs(start), toEpochMs(end), opts?.tz ?? 'UTC');
+  }
+
+  /**
+   *  The first maximal covered interval starting strictly after `after`;
+   *  coverage that already contains `after` is skipped. Returns `null` when
+   *  no further interval starts before the year-9999 horizon.
+   *
+   *  @example
+   *  parse('T0900-1800 E1-5').next('2026-07-07T10:00:00Z');
+   *  // → { start: 2026-07-08T09:00:00Z, end: 2026-07-08T18:00:00Z }
+   */
+  next(after: DateInput, opts?: IEvalOptions): IInterval | null {
+    return nextInterval(this.ir, toEpochMs(after), opts?.tz ?? 'UTC');
   }
 
   /** @internal The compiled IR — consumed by the evaluator layers. */

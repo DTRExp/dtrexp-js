@@ -31,6 +31,22 @@ export function epochDay(year: number, month: number, day: number): number {
   return era * 146_097 + doe - 719_468;
 }
 
+/** Civil date from days since 1970-01-01 (Hinnant's civil_from_days — inverse of epochDay). */
+export function civilFromDays(days: number): { year: number; month: number; day: number } {
+  const z = days + 719_468;
+  const era = Math.floor(z / 146_097);
+  const doe = z - era * 146_097;
+  const yoe = Math.floor(
+    (doe - Math.floor(doe / 1460) + Math.floor(doe / 36_524) - Math.floor(doe / 146_096)) / 365
+  );
+  const y = yoe + era * 400;
+  const doy = doe - (365 * yoe + Math.floor(yoe / 4) - Math.floor(yoe / 100));
+  const mp = Math.floor((5 * doy + 2) / 153);
+  const day = doy - Math.floor((153 * mp + 2) / 5) + 1;
+  const month = mp < 10 ? mp + 3 : mp - 9;
+  return { year: month <= 2 ? y + 1 : y, month, day };
+}
+
 /** ISO weekday of a civil date: 1 (Mon) – 7 (Sun). 1970-01-01 was a Thursday. */
 export function weekdayOf(year: number, month: number, day: number): number {
   return ((((epochDay(year, month, day) + 3) % 7) + 7) % 7) + 1;
@@ -133,6 +149,11 @@ function buildFields(
   };
 }
 
+/** Day-level calendar fields of a civil date (midnight) — pure math, no time zone involved. */
+export function fieldsFromCivil(year: number, month: number, day: number): IFields {
+  return buildFields(year, month, day, 0, 0, 0, 0);
+}
+
 const formatterCache = new Map<string, Intl.DateTimeFormat>();
 
 function formatterFor(tz: string): Intl.DateTimeFormat {
@@ -213,4 +234,24 @@ export function epochFromLocal(
   const c2 = target - offsetAt(c1);
   if (offsetAt(c2) + c2 === target) return c2;
   return Math.max(c1, c2);
+}
+
+/** Absolute instant of a local pseudo-epoch value (millisecond precision). */
+export function epochFromPseudo(tz: string, pseudo: number): number {
+  const dayNum = Math.floor(pseudo / MS_PER_DAY);
+  const msOfDay = pseudo - dayNum * MS_PER_DAY;
+  const { year, month, day } = civilFromDays(dayNum);
+  const ms = msOfDay % 1000;
+  const seconds = Math.floor(msOfDay / 1000);
+  return (
+    epochFromLocal(
+      tz,
+      year,
+      month,
+      day,
+      Math.floor(seconds / 3600),
+      Math.floor(seconds / 60) % 60,
+      seconds % 60
+    ) + ms
+  );
 }
