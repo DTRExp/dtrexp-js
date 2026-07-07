@@ -62,17 +62,23 @@ describe('covers() — instant input forms', () => {
     expect(dtre.covers('2024-03-01T00:30:00Z')).toBe(true);
   });
 
-  it('rejects an unsupported input type', () => {
+  it('rejects an unsupported input type with a specific message', () => {
     // biome-ignore lint/suspicious/noExplicitAny: exercising the runtime type guard
-    expect(() => dtre.covers(true as any)).toThrow(TypeError);
+    expect(() => dtre.covers(true as any)).toThrow(/Expected a Date/);
     // biome-ignore lint/suspicious/noExplicitAny: exercising the runtime type guard
-    expect(() => dtre.covers(null as any)).toThrow(TypeError);
+    expect(() => dtre.covers(null as any)).toThrow(/Expected a Date/);
+    // an object lacking epochMilliseconds is not a Temporal instant
+    expect(() => dtre.covers({} as unknown as number)).toThrow(/Expected a Date/);
   });
 
-  it('rejects a non-finite instant', () => {
-    expect(() => dtre.covers(Number.NaN)).toThrow(TypeError);
-    expect(() => dtre.covers(new Date('not a date'))).toThrow(TypeError);
-    expect(() => dtre.covers('not a date')).toThrow(TypeError);
+  it('rejects a non-finite instant with a specific message', () => {
+    expect(() => dtre.covers(Number.NaN)).toThrow(/Invalid instant/);
+    expect(() => dtre.covers(new Date('not a date'))).toThrow(/Invalid instant/);
+    expect(() => dtre.covers('not a date')).toThrow(/Invalid instant/);
+    // a Temporal-like object carrying a non-finite epoch
+    expect(() => dtre.covers({ epochMilliseconds: Number.POSITIVE_INFINITY })).toThrow(
+      /Invalid instant/
+    );
   });
 });
 

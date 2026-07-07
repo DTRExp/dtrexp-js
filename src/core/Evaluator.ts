@@ -212,8 +212,8 @@ export function isSubDayCadence(c: ICadence): boolean {
  *  `[lo, hi)`, in local pseudo-epoch, constrain arithmetic per spec §9.2.
  */
 export function cadencePseudoWindows(c: ICadence, lo: number, hi: number): [number, number][] {
+  // occurrences before the anchor are naturally excluded by the `start >= hi` loop guards
   const anchorPseudo = literalPseudo(c.anchor);
-  if (hi <= anchorPseudo) return [];
   const out: [number, number][] = [];
 
   if (c.periodUnit === 'M' || c.periodUnit === 'Y') {
@@ -262,7 +262,6 @@ export function cadenceAbsWindows(
     c.anchor.minute ?? 0,
     c.anchor.second ?? 0
   );
-  if (hi <= anchorEpoch) return [];
   const periodMs = c.period * (c.periodUnit === 'H' ? 3_600_000 : 60_000);
   const durMs = durationMs(c.duration, c.durationUnit as 'W' | 'D' | 'H' | 'm');
   const out: [number, number][] = [];

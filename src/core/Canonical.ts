@@ -5,10 +5,24 @@ import type {
   IDtreIR,
   IExpressionIR,
   ISelector,
+  ITimeRange,
   ITimeSelector
 } from '../types/index.js';
 
 const MS_PER_DAY = 86_400_000;
+
+/**
+ *  Detects a parser-split midnight wrap (`[0, e)` + `[s, 24h)` with `s > e`) and
+ *  returns the fused `s-e` range, else `null`. Shared by canonical and describe.
+ */
+export function midnightWrap(ranges: ITimeRange[]): ITimeRange | null {
+  if (ranges.length !== 2) return null;
+  const [first, second] = ranges as [ITimeRange, ITimeRange];
+  if (first.startMs === 0 && second.endMs === MS_PER_DAY && second.startMs > first.endMs) {
+    return { startMs: second.startMs, endMs: first.endMs };
+  }
+  return null;
+}
 /** Canonical component order: smallest unit first (spec §1). */
 const ORDER: Record<string, number> = {
   s: 0,
@@ -71,21 +85,9 @@ function renderSpan(span: { start: number | null; end: number | null }): string 
 }
 
 function renderTime(time: ITimeSelector): string {
-  const r = time.ranges;
-  const first = r[0];
-  const last = r[1];
-  // re-fuse a parser-split midnight wrap: [0, e) + [s, 24h) → s-e
-  if (
-    r.length === 2 &&
-    first &&
-    last &&
-    first.startMs === 0 &&
-    last.endMs === MS_PER_DAY &&
-    last.startMs > first.endMs
-  ) {
-    return `T${fmtTime(last.startMs)}-${fmtTime(first.endMs)}`;
-  }
-  return `T${r.map((range) => `${fmtTime(range.startMs)}-${fmtTime(range.endMs)}`).join(',')}`;
+  const wrap = midnightWrap(time.ranges);
+  if (wrap) return `T${fmtTime(wrap.startMs)}-${fmtTime(wrap.endMs)}`;
+  return `T${time.ranges.map((range) => `${fmtTime(range.startMs)}-${fmtTime(range.endMs)}`).join(',')}`;
 }
 
 function fmtTime(ms: number): string {
@@ -106,9 +108,8 @@ function renderCadence(c: ICadence): string {
 }
 
 function renderBounds(bounds: IBounds): string {
-  if (bounds.start && bounds.end && sameLiteral(bounds.start, bounds.end)) {
-    return renderLiteral(bounds.start);
-  }
+  // the parser gives a bare date literal the same object for start and end
+  if (bounds.start && bounds.start === bounds.end) return renderLiteral(bounds.start);
   const start = bounds.start ? renderLiteral(bounds.start) : '*';
   const end = bounds.end ? renderLiteral(bounds.end) : '*';
   return `${start}-${end}`;
@@ -122,17 +123,6 @@ export function renderLiteral(literal: IDateLiteral): string {
     if (literal.second !== undefined) out += pad2(literal.second);
   }
   return out;
-}
-
-function sameLiteral(a: IDateLiteral, b: IDateLiteral): boolean {
-  return (
-    a.year === b.year &&
-    a.month === b.month &&
-    a.day === b.day &&
-    a.hour === b.hour &&
-    a.minute === b.minute &&
-    a.second === b.second
-  );
 }
 
 function pad2(n: number): string {

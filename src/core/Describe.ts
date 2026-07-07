@@ -8,9 +8,8 @@ import type {
   ITimeSelector,
   Unit
 } from '../types/index.js';
-import { renderLiteral } from './Canonical.js';
+import { midnightWrap } from './Canonical.js';
 
-const MS_PER_DAY = 86_400_000;
 const MONTHS = [
   'January',
   'February',
@@ -128,20 +127,9 @@ function valueName(unit: Unit, value: number): string {
 }
 
 function describeTime(time: ITimeSelector): string {
-  const r = time.ranges;
-  const first = r[0];
-  const last = r[1];
-  if (
-    r.length === 2 &&
-    first &&
-    last &&
-    first.startMs === 0 &&
-    last.endMs === MS_PER_DAY &&
-    last.startMs > first.endMs
-  ) {
-    return `${clock(last.startMs)}–${clock(first.endMs)}`;
-  }
-  return r.map((range) => `${clock(range.startMs)}–${clock(range.endMs)}`).join(' and ');
+  const wrap = midnightWrap(time.ranges);
+  if (wrap) return `${clock(wrap.startMs)}–${clock(wrap.endMs)}`;
+  return time.ranges.map((range) => `${clock(range.startMs)}–${clock(range.endMs)}`).join(' and ');
 }
 
 function clock(ms: number): string {
@@ -170,9 +158,9 @@ function describeCadence(c: ICadence): string {
 }
 
 function describeBounds(bounds: IBounds): string {
+  // the parser gives a bare date literal the same object for start and end
+  if (bounds.start && bounds.start === bounds.end) return `on ${dateWords(bounds.start)}`;
   if (bounds.start && bounds.end) {
-    const same = renderLiteral(bounds.start) === renderLiteral(bounds.end);
-    if (same) return `on ${dateWords(bounds.start)}`;
     return `from ${dateWords(bounds.start)} through ${dateWords(bounds.end)}`;
   }
   if (bounds.start) return `from ${dateWords(bounds.start)}`;
