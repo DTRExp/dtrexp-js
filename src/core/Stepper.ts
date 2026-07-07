@@ -28,7 +28,7 @@ const MS_PER_DAY = 86_400_000;
 /** Scan horizon: coverage is explored through the end of year 9999 (spec Y domain). */
 const HORIZON_PSEUDO = epochDay(10_000, 1, 1) * MS_PER_DAY;
 
-interface IRange {
+export interface IRange {
   lo: number;
   hi: number;
 }
@@ -61,13 +61,13 @@ function planFor(ir: IDtreIR): IExprPlan[] {
   });
 }
 
-function coveredValues(selector: ISelector, count: number): boolean[] {
+export function coveredValues(selector: ISelector, count: number): boolean[] {
   const out = new Array<boolean>(count);
   for (let v = 0; v < count; v++) out[v] = selectorCoversValue(selector, v, 0, count - 1);
   return out;
 }
 
-function unitRanges(selector: ISelector, count: number, unitMs: number): IRange[] {
+export function unitRanges(selector: ISelector, count: number, unitMs: number): IRange[] {
   const out: IRange[] = [];
   for (let v = 0; v < count; v++) {
     if (!selectorCoversValue(selector, v, 0, count - 1)) continue;
@@ -212,7 +212,7 @@ function toInterval(startPseudo: number, endPseudo: number, tz: string): IInterv
 // range algebra (ms-of-day)
 // -------------------------------
 
-function sortMerge(ranges: IRange[]): IRange[] {
+export function sortMerge(ranges: IRange[]): IRange[] {
   const sorted = ranges.filter((r) => r.hi > r.lo).sort((a, b) => a.lo - b.lo);
   const out: IRange[] = [];
   for (const r of sorted) {
@@ -223,7 +223,7 @@ function sortMerge(ranges: IRange[]): IRange[] {
   return out;
 }
 
-function intersectRanges(a: IRange[], b: IRange[]): IRange[] {
+export function intersectRanges(a: IRange[], b: IRange[]): IRange[] {
   const out: IRange[] = [];
   let i = 0;
   let j = 0;
@@ -239,7 +239,7 @@ function intersectRanges(a: IRange[], b: IRange[]): IRange[] {
   return out;
 }
 
-function clipRanges(ranges: IRange[], lo: number, hi: number): IRange[] {
+export function clipRanges(ranges: IRange[], lo: number, hi: number): IRange[] {
   const out: IRange[] = [];
   for (const r of ranges) {
     const s = Math.max(r.lo, lo);
@@ -250,7 +250,7 @@ function clipRanges(ranges: IRange[], lo: number, hi: number): IRange[] {
 }
 
 /** Keeps only the parts of `ranges` whose cyclic slot (e.g. minute-of-hour) is covered. */
-function filterCyclic(
+export function filterCyclic(
   ranges: IRange[],
   covered: boolean[],
   unitMs: number,

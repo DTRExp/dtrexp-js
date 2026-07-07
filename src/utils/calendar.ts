@@ -158,6 +158,7 @@ const formatterCache = new Map<string, Intl.DateTimeFormat>();
 
 function formatterFor(tz: string): Intl.DateTimeFormat {
   let fmt = formatterCache.get(tz);
+  // Stryker disable next-line ConditionalExpression: cache is a pure optimization — recreating always yields the same formatter
   if (!fmt) {
     fmt = new Intl.DateTimeFormat('en-US', {
       timeZone: tz,
@@ -176,6 +177,7 @@ function formatterFor(tz: string): Intl.DateTimeFormat {
 
 /** Calendar fields of an absolute instant in the given IANA zone — one extraction per covers(). */
 export function fieldsFromInstant(epochMs: number, tz: string): IFields {
+  // Stryker disable next-line all: 'UTC' fast path is a pure optimization — the Intl path yields identical fields
   if (tz === 'UTC') return utcFields(epochMs);
   let year = 0;
   let month = 0;
@@ -227,6 +229,7 @@ export function epochFromLocal(
 ): number {
   const target =
     epochDay(year, month, day) * MS_PER_DAY + hour * 3_600_000 + minute * 60_000 + second * 1000;
+  // Stryker disable next-line all: 'UTC' fast path is a pure optimization — the candidate search yields the same result
   if (tz === 'UTC') return target;
   const offsetAt = (t: number): number => fieldsFromInstant(t, tz).pseudo - t;
   const c1 = target - offsetAt(target);

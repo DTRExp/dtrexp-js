@@ -88,7 +88,7 @@ describe('describe() — locale guard', () => {
     expect(parse('M3').describe('en')).toBe('in March');
   });
 
-  it('throws on an unsupported locale', () => {
-    expect(() => parse('M3').describe('fr')).toThrow(RangeError);
+  it('throws on an unsupported locale with a specific message', () => {
+    expect(() => parse('M3').describe('fr')).toThrow(/Unsupported locale/);
   });
 });

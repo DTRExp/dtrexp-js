@@ -170,6 +170,7 @@ function matchOrdinal(ordinal: number, f: IFields, present: Set<Unit>): boolean 
       total = daysInYear(f.year);
     }
   }
+  // Stryker disable next-line EqualityOperator: ordinal is never 0 (parser forbids #0), so > and >= are equivalent
   if (ordinal > 0) return Math.ceil(day / 7) === ordinal;
   return Math.ceil((total - day + 1) / 7) === -ordinal;
 }

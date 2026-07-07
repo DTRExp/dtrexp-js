@@ -82,7 +82,8 @@ function describeSelector(selector: ISelector): string {
     const nth =
       selector.ordinal === -1
         ? 'last'
-        : selector.ordinal < 0
+        : // Stryker disable next-line EqualityOperator: ordinal is never 0, so < and <= are equivalent
+          selector.ordinal < 0
           ? `${ordinalWord(-selector.ordinal)}-to-last`
           : ordinalWord(selector.ordinal);
     return `the ${nth} ${values}`;

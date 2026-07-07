@@ -1,5 +1,6 @@
 import {
   addMonthsConstrain,
+  civilFromDays,
   dayOfQuarter,
   dayOfYear,
   daysInMonth,
@@ -168,5 +169,40 @@ describe('calendar: time-zone field extraction', () => {
     expect(epochFromLocal('Europe/Berlin', 2026, 3, 29, 1, 30, 0)).toBe(
       Date.UTC(2026, 2, 29, 0, 30)
     );
+  });
+});
+
+describe('civilFromDays — inverse of epochDay', () => {
+  it('round-trips civil dates across a wide range', () => {
+    for (const [y, m, d] of [
+      [1901, 1, 1],
+      [1970, 1, 1],
+      [2000, 2, 29],
+      [2024, 12, 31],
+      [2026, 3, 8],
+      [2100, 2, 28],
+      [2400, 2, 29]
+    ] as Array<[number, number, number]>) {
+      expect(civilFromDays(epochDay(y, m, d))).toEqual({ year: y, month: m, day: d });
+    }
+  });
+});
+
+describe('monthsBetween — cross-year', () => {
+  it('counts whole months across year boundaries', () => {
+    const a = { year: 2018, month: 11, day: 15, msOfDay: 0 };
+    expect(monthsBetween(a, { year: 2019, month: 11, day: 15, msOfDay: 0 })).toBe(12);
+    expect(monthsBetween(a, { year: 2020, month: 5, day: 10, msOfDay: 0 })).toBe(17);
+    const anchor = { year: 2018, month: 3, day: 1, msOfDay: 0 };
+    expect(monthsBetween(anchor, { year: 2019, month: 5, day: 10, msOfDay: 0 })).toBe(14);
+  });
+});
+
+describe('fieldsFromInstant — zoned seconds and milliseconds', () => {
+  it('extracts seconds and sub-second ms through the Intl path', () => {
+    const f = fieldsFromInstant(Date.UTC(2026, 6, 7, 7, 30, 45, 250), 'Europe/Berlin');
+    expect(f.second).toBe(45);
+    expect(f.msOfDay % 1000).toBe(250);
+    expect([f.hour, f.minute]).toEqual([9, 30]); // +2 summer offset
   });
 });

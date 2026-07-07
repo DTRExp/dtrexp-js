@@ -143,7 +143,11 @@ export function toRRuleString(ir: IDtreIR): string | null {
 }
 
 /** Expands spans (and phase-locked strides) to a concrete value list, else null. */
-function expandSpans(selector: ISelector, max: number, allowNegative = true): number[] | null {
+export function expandSpans(
+  selector: ISelector,
+  max: number,
+  allowNegative = true
+): number[] | null {
   const out: number[] = [];
   if (selector.stride) {
     const s = selector.stride;
@@ -168,7 +172,7 @@ function expandSpans(selector: ISelector, max: number, allowNegative = true): nu
 }
 
 /** Day spans keep RRULE's native negative-day form: `D-7-*` → BYMONTHDAY=-7…-1. */
-function expandDaySpans(selector: ISelector): number[] | null {
+export function expandDaySpans(selector: ISelector): number[] | null {
   if (selector.stride) return null;
   const out: number[] = [];
   for (const span of selector.spans) {

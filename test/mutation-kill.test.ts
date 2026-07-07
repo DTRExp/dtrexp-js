@@ -30,11 +30,11 @@ describe('midnightWrap — every condition', () => {
   });
 
   it('requires the first range to start at midnight', () => {
-    expect(midnightWrap([r(100, DAY / 2), r(DAY / 2, DAY)])).toBeNull();
+    expect(midnightWrap([r(100, 200), r(300, DAY)])).toBeNull();
   });
 
   it('requires the second range to end at end-of-day', () => {
-    expect(midnightWrap([r(0, DAY / 2), r(DAY / 2, DAY - 1)])).toBeNull();
+    expect(midnightWrap([r(0, 200), r(300, DAY - 1)])).toBeNull();
   });
 
   it('requires a genuine gap (adjacent ranges are not a wrap)', () => {
@@ -227,5 +227,71 @@ describe('ordinal from the end — last occurrence is the last day', () => {
   it('covers a last-weekday that is also the month-end', () => {
     expect(parse('E7#-1 M5').covers('2026-05-31T12:00:00Z')).toBe(true);
     expect(parse('E7#-1 M5').covers('2026-05-24T12:00:00Z')).toBe(false);
+  });
+});
+
+describe('describe — exhaustive names and ordinal suffixes', () => {
+  const d = (s: string) => parse(s).describe();
+  const MONTHS = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December'
+  ];
+  const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+  it('names every month', () => {
+    MONTHS.forEach((name, i) => expect(d(`M${i + 1}`)).toBe(`in ${name}`));
+  });
+
+  it('names every weekday', () => {
+    WEEKDAYS.forEach((name, i) => expect(d(`E${i + 1}`)).toBe(`on ${name}`));
+  });
+
+  it('names every cadence period/duration unit noun', () => {
+    expect(d('20200101/3Y/1D')).toBe('every 3 years from 2020-01-01, 1 day long');
+    expect(d('20200101/3M/1D')).toBe('every 3 months from 2020-01-01, 1 day long');
+    expect(d('20200101/3W/1D')).toBe('every 3 weeks from 2020-01-01, 1 day long');
+    expect(d('20200101/3D/1H')).toBe('every 3 days from 2020-01-01, 1 hour long');
+    expect(d('20200101T0000/3H/1m')).toBe('every 3 hours from 2020-01-01 00:00, 1 minute long');
+  });
+
+  it('renders ordinal suffixes for teens and non-teens', () => {
+    expect(d('Y2000-2100/11')).toBe('every 11th year from 2000 through 2100');
+    expect(d('Y2000-2100/12')).toBe('every 12th year from 2000 through 2100');
+    expect(d('Y2000-2100/13')).toBe('every 13th year from 2000 through 2100');
+    expect(d('Y2000-2100/21')).toBe('every 21st year from 2000 through 2100');
+    expect(d('Y2000-2100/22')).toBe('every 22nd year from 2000 through 2100');
+    expect(d('Y2000-2100/23')).toBe('every 23rd year from 2000 through 2100');
+  });
+
+  it('describes a positive day-of-month, week and time-with-seconds', () => {
+    expect(d('D5 M3')).toBe('on day 5 in March');
+    expect(d('T093015-100000')).toBe('09:30:15–10:00'); // seconds on start
+    expect(d('s30')).toBe('at second 30');
+    expect(d('H12')).toBe('at hour 12');
+  });
+});
+
+describe('matchOrdinal — quarter and year scope actually differ from month', () => {
+  it('resolves the 5th Sunday of Q1 (a 1st-Sunday date in month scope)', () => {
+    // Q1 2026 Sundays: Jan 4,11,18,25 then Feb 1 → 5th of the quarter = 2026-02-01
+    // in month scope Feb 1 is the 1st Sunday of February, so scope must be the quarter
+    expect(parse('E7#5 Q1').covers('2026-02-01T12:00:00Z')).toBe(true);
+    expect(parse('E7#5 Q1').covers('2026-01-04T12:00:00Z')).toBe(false);
+  });
+
+  it('resolves the 5th Sunday of the year (a 1st-Sunday date in month scope)', () => {
+    // 5th Sunday of 2026 = 2026-02-01; month scope would call it the 1st Sunday of Feb
+    expect(parse('E7#5 Y2026').covers('2026-02-01T12:00:00Z')).toBe(true);
+    expect(parse('E7#5 Y2026').covers('2026-01-04T12:00:00Z')).toBe(false);
   });
 });

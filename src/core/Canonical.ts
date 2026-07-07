@@ -65,8 +65,9 @@ function renderSelector(selector: ISelector): string {
     const duration = s.duration !== 1 ? `/${s.duration}` : '';
     return `${selector.unit}${s.start}${end}/${s.interval}${duration}`;
   }
-  // full-domain plain selectors (`Y*`) are redundant — dropped unless alone
-  if (!selector.exclude && selector.ordinal === undefined && isFullDomain(selector)) return '';
+  // full-domain plain selectors (`Y*`) are redundant — dropped unless alone.
+  // (an ordinal selector always carries a concrete weekday, so it is never full-domain)
+  if (!selector.exclude && isFullDomain(selector)) return '';
   const spans = selector.spans.map(renderSpan).join(',');
   const ordinal = selector.ordinal !== undefined ? `#${selector.ordinal}` : '';
   return `${selector.unit}${selector.exclude ? '!' : ''}${spans}${ordinal}`;
