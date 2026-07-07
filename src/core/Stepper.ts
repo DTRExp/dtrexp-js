@@ -1,4 +1,5 @@
 import type {
+  IDateLiteral,
   IDtreIR,
   IExpressionIR,
   IFields,
@@ -163,12 +164,9 @@ export function nextInterval(ir: IDtreIR, afterEpoch: number, tz: string): IInte
 
   // if every union branch is end-bounded, stop scanning at the latest bound
   let horizon = HORIZON_PSEUDO;
-  if (ir.expressions.every((e) => e.bounds?.end)) {
-    let latest = 0;
-    for (const e of ir.expressions) {
-      if (e.bounds?.end) latest = Math.max(latest, literalSpanEnd(e.bounds.end));
-    }
-    horizon = Math.min(horizon, latest);
+  const ends = ir.expressions.map((e) => e.bounds?.end ?? null);
+  if (ends.every((end): end is IDateLiteral => end !== null)) {
+    horizon = Math.min(horizon, Math.max(...ends.map(literalSpanEnd)));
   }
 
   let skipCursor = -1; // end of the contiguous coverage containing afterEpoch, while chaining

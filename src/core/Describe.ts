@@ -182,7 +182,9 @@ function describeBounds(bounds: IBounds): string {
 function dateWords(literal: IDateLiteral): string {
   const date = `${literal.year}-${String(literal.month).padStart(2, '0')}-${String(literal.day).padStart(2, '0')}`;
   if (literal.hour === undefined) return date;
-  return `${date} ${String(literal.hour).padStart(2, '0')}:${String(literal.minute ?? 0).padStart(2, '0')}`;
+  // the parser sets minute whenever it sets hour (Thhmm), so minute is defined here
+  const minute = literal.minute as number;
+  return `${date} ${String(literal.hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
 function ordinalWord(n: number): string {

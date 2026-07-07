@@ -60,9 +60,7 @@ function renderSelector(selector: ISelector): string {
 
 function isFullDomain(selector: ISelector): boolean {
   return (
-    selector.spans.length === 1 &&
-    selector.spans[0]?.start === null &&
-    selector.spans[0]?.end === null
+    selector.spans.length === 1 && selector.spans.every((s) => s.start === null && s.end === null)
   );
 }
 
@@ -119,7 +117,8 @@ function renderBounds(bounds: IBounds): string {
 export function renderLiteral(literal: IDateLiteral): string {
   let out = `${String(literal.year).padStart(4, '0')}${pad2(literal.month)}${pad2(literal.day)}`;
   if (literal.hour !== undefined) {
-    out += `T${pad2(literal.hour)}${pad2(literal.minute ?? 0)}`;
+    // the parser sets minute whenever it sets hour (Thhmm), so minute is defined here
+    out += `T${pad2(literal.hour)}${pad2(literal.minute as number)}`;
     if (literal.second !== undefined) out += pad2(literal.second);
   }
   return out;

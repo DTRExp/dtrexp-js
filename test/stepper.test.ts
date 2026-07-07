@@ -141,3 +141,31 @@ describe('intersect()', () => {
     ]);
   });
 });
+
+describe('next()/intersect() — remaining branches', () => {
+  const iso2 = (d: Date | undefined): string | undefined => d?.toISOString();
+
+  it('returns the first window when a same-day gap ends it', () => {
+    // from 08:00, the 09:00–12:00 window is returned, not merged with 14:00–17:00
+    const next = parse('T0900-1200,1400-1700').next('2026-07-07T08:00:00Z');
+    expect(iso2(next?.start)).toBe('2026-07-07T09:00:00.000Z');
+    expect(iso2(next?.end)).toBe('2026-07-07T12:00:00.000Z');
+  });
+
+  it('skips a multi-day window that contains `after`, across its midnight seam', () => {
+    // inside Saturday of a weekend → skip the whole Sat–Sun block, return the next
+    const next = parse('E6-7').next('2026-07-11T12:00:00Z');
+    expect(iso2(next?.start)).toBe('2026-07-18T00:00:00.000Z');
+    expect(iso2(next?.end)).toBe('2026-07-20T00:00:00.000Z');
+  });
+
+  it('clips covered days against a bounds component', () => {
+    const intervals = parse('T0900-1800 *-20260707T1000').intersect(
+      '2026-07-07T00:00:00Z',
+      '2026-07-08T00:00:00Z'
+    );
+    expect(intervals).toHaveLength(1);
+    expect(iso2(intervals[0]?.start)).toBe('2026-07-07T09:00:00.000Z');
+    expect(iso2(intervals[0]?.end)).toBe('2026-07-07T10:01:00.000Z');
+  });
+});

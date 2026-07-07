@@ -42,12 +42,7 @@ export function toRRuleString(ir: IDtreIR): string | null {
   }
 
   for (const selector of expr.selectors) {
-    if (
-      selector.exclude ||
-      (selector.stride?.duration !== undefined && selector.stride.duration > 1)
-    ) {
-      if (selector.exclude) return null;
-    }
+    if (selector.exclude) return null;
     switch (selector.unit) {
       case 'Y': {
         if (expr.cadence) return null;

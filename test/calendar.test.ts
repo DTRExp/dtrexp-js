@@ -161,4 +161,12 @@ describe('calendar: time-zone field extraction', () => {
       Date.UTC(2026, 9, 25, 1, 30)
     );
   });
+
+  it('corrects a pre-transition time via the second offset candidate', () => {
+    // 01:30 local on spring-forward day is valid (+1) but the target-offset
+    // guess lands past the gap — the second candidate recovers it
+    expect(epochFromLocal('Europe/Berlin', 2026, 3, 29, 1, 30, 0)).toBe(
+      Date.UTC(2026, 2, 29, 0, 30)
+    );
+  });
 });
