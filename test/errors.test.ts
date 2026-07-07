@@ -33,17 +33,27 @@ const cases: Array<[string, string]> = [
   ['20200101/10D/1X', 'bad-cadence-unit'],
   ['Q0', 'out-of-domain'],
   ['H24', 'out-of-domain'],
-  ['s60', 'out-of-domain']
+  ['s60', 'out-of-domain'],
+  ['20180101T120060', 'bad-date-literal'], // second 60
+  ['T125960', 'bad-time-value'], // second 60 in a time value
+  ['20200101/2H/120m', 'cadence-duration'] // duration equals period across units
 ];
 
-/** Template messages must retain their interpolated, meaningful text. */
+/** Template / readInt messages must retain their interpolated, meaningful text. */
 const messageWords: Array<[string, string]> = [
   ['M-13', 'domain'],
   ['M5-3', 'Backwards'],
   ['20180230', 'calendar date'],
   ['T2500', 'Hour'],
   ['M3/14', 'exceeds'],
-  ['M3 X5', 'Unexpected']
+  ['M3 X5', 'Unexpected'],
+  // readInt `what` labels surface when a required number is missing
+  ['M', 'value'],
+  ['E7#', 'ordinal'],
+  ['M1/', 'interval'],
+  ['M1/5/', 'duration'],
+  ['20200101/', 'period'],
+  ['20200101/5M/', 'duration']
 ];
 
 describe('parser: exhaustive error paths', () => {
@@ -107,10 +117,32 @@ describe('parser: valid edge forms that must parse', () => {
     ]) {
       expect(() => parse(exp)).not.toThrow();
     }
+    // negative indices exactly at the domain size (E-7 → 7 days back from the week end)
+    expect(() => parse('E-7')).not.toThrow();
+    expect(() => parse('D-31 M1')).not.toThrow();
     // date-literal field maxima
     expect(() => parse('20241231')).not.toThrow(); // Dec 31
     expect(() => parse('20240229')).not.toThrow(); // leap Feb 29
     expect(() => parse('20180101T235959')).not.toThrow(); // 23:59:59
     expect(parse('20180101T120059').covers('2018-01-01T12:00:59Z')).toBe(true); // second 59
+  });
+
+  it('accepts time values at each precision and hour/minute/second maxima', () => {
+    expect(() => parse('T23')).not.toThrow();
+    expect(() => parse('T1259')).not.toThrow();
+    expect(() => parse('T125959')).not.toThrow();
+    expect(parse('T12').covers('2026-07-07T12:59:00Z')).toBe(true); // 1-hour unit
+    expect(parse('T12').covers('2026-07-07T13:00:00Z')).toBe(false);
+    expect(parse('T1230').covers('2026-07-07T12:30:30Z')).toBe(true); // 1-minute unit
+    expect(parse('T1230').covers('2026-07-07T12:31:00Z')).toBe(false);
+    expect(parse('T123015').covers('2026-07-07T12:30:15.500Z')).toBe(true); // 1-second unit
+    expect(parse('T123015').covers('2026-07-07T12:30:16Z')).toBe(false);
+  });
+
+  it('accepts a cross-unit cadence duration just under its period', () => {
+    // 119 minutes < 2 hours → valid; 120 would equal the period (rejected above)
+    expect(() => parse('20200101/2H/119m')).not.toThrow();
+    expect(parse('20200101T0000/2H/119m').covers('2020-01-01T01:58:00Z')).toBe(true);
+    expect(parse('20200101T0000/2H/119m').covers('2020-01-01T01:59:30Z')).toBe(false);
   });
 });
