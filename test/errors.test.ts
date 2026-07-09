@@ -1,5 +1,5 @@
 import { parse } from '../src/index.js';
-import { expectSyntaxError } from './parser.test.js';
+import { expectSyntaxError } from './helpers.js';
 
 /** Each entry: expression → expected error code. Covers the paths not in vectors.json. */
 const cases: Array<[string, string]> = [

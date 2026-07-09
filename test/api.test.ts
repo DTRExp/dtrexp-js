@@ -63,10 +63,9 @@ describe('covers() — instant input forms', () => {
   });
 
   it('rejects an unsupported input type with a specific message', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: exercising the runtime type guard
-    expect(() => dtrexp.covers(true as any)).toThrow(/Expected a Date/);
-    // biome-ignore lint/suspicious/noExplicitAny: exercising the runtime type guard
-    expect(() => dtrexp.covers(null as any)).toThrow(/Expected a Date/);
+    // these casts exercise the runtime type guard from untyped callers
+    expect(() => dtrexp.covers(true as unknown as number)).toThrow(/Expected a Date/);
+    expect(() => dtrexp.covers(null as unknown as number)).toThrow(/Expected a Date/);
     // an object lacking epochMilliseconds is not a Temporal instant
     expect(() => dtrexp.covers({} as unknown as number)).toThrow(/Expected a Date/);
   });

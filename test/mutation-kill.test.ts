@@ -262,11 +262,11 @@ describe('describe — exhaustive names and ordinal suffixes', () => {
   const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
   it('names every month', () => {
-    MONTHS.forEach((name, i) => expect(d(`M${i + 1}`)).toBe(`in ${name}`));
+    for (const [i, name] of MONTHS.entries()) expect(d(`M${i + 1}`)).toBe(`in ${name}`);
   });
 
   it('names every weekday', () => {
-    WEEKDAYS.forEach((name, i) => expect(d(`E${i + 1}`)).toBe(`on ${name}`));
+    for (const [i, name] of WEEKDAYS.entries()) expect(d(`E${i + 1}`)).toBe(`on ${name}`);
   });
 
   it('names every cadence period/duration unit noun', () => {
