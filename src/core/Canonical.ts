@@ -81,7 +81,13 @@ function renderSelector(selector: ISelector): string {
  */
 export function spanWrap(spans: ISpan[]): { start: number; end: number } | null {
   if (spans.length !== 2) return null;
+  // Stryker disable next-line ConditionalExpression,LogicalOperator,EqualityOperator: equivalent — a mutant
+  // can only admit extra up-candidates with a null, zero or negative start; the fuse guard below requires
+  // up.start > down.end where down.end ≥ 1, which such a start can never satisfy, and candidate-order
+  // changes never alter the outcome (the alternative candidate fails the same guard).
   const up = spans.find((s) => s.start !== null && s.start > 0 && s.end === null);
+  // Stryker disable next-line ConditionalExpression: equivalent — dropping `s.end !== null` only admits
+  // {null, null}, which the parser's star-in-list rejection guarantees never coexists with a second span.
   const down = spans.find((s) => s.start === null && s.end !== null && s.end > 0);
   if (up && down && (up.start as number) > (down.end as number)) {
     return { start: up.start as number, end: down.end as number };
@@ -90,6 +96,8 @@ export function spanWrap(spans: ISpan[]): { start: number; end: number } | null 
 }
 
 function isFullDomain(selector: ISelector): boolean {
+  // Stryker disable next-line ConditionalExpression: equivalent — spans[0] can only be {null, null} when it
+  // is the sole span (star-in-list is rejected at parse), so multi-span selectors return false either way.
   if (selector.spans.length !== 1) return false;
   const first = selector.spans[0] as ISpan;
   return first.start === null && first.end === null;

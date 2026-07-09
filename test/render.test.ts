@@ -15,8 +15,20 @@ describe('toString() — canonical form', () => {
     ['D-7:* Y2020', 'D-7:* Y2020'],
     ['M11:2', 'M11:2'],
     ['M11:*,*:2', 'M11:2'],
+    ['M*:2,11:*', 'M11:2'], // fusion is order-independent
     ['H22:6 E5', 'H22:6 E5'],
     ['M3:*,*:7', 'M3:*,*:7'],
+    // no fusion when up-start does not exceed down-end: the pair is not a wrap
+    ['M7:*,*:7', 'M7:*,*:7'],
+    // a down-half must end past the domain start (H*:0 is just hour 0's edge case)
+    ['H5:*,*:0', 'H5:*,*:0'],
+    // a closed span alongside an open one is a list, never half of a wrap
+    ['M5:*,3', 'M5:*,3'],
+    ['M3,*:2', 'M3,*:2'],
+    // a negative down-end is per-instance (§9.1), never a wrap half
+    ['M5:*,*:-3', 'M5:*,*:-3'],
+    // wrap inside a longer list stays split (3 spans never fuse)
+    ['M11:2,5', 'M11:*,*:2,5'],
     ['E7#-1 M4', 'E7#-1 M4'],
     ['T093015.250', 'T093015.250:093015.251'],
     ['E5#1 | E5#3', 'E5#1 | E5#3']
