@@ -30,7 +30,7 @@ describe('parser: conformance — coverage expressions all parse', () => {
 
 describe('parser: IR shapes', () => {
   it('compiles a selector with list spans', () => {
-    const { ir } = parseToIR('M1,3,7-9');
+    const { ir } = parseToIR('M1,3,7:9');
     expect(ir.expressions).toHaveLength(1);
     const [expr] = ir.expressions;
     expect(expr?.selectors[0]).toEqual({
@@ -45,7 +45,7 @@ describe('parser: IR shapes', () => {
   });
 
   it('compiles exclusions, negatives and open ranges', () => {
-    const { ir } = parseToIR('M!5,7-9 D-7-*');
+    const { ir } = parseToIR('M!5,7:9 D-7:*');
     const [expr] = ir.expressions;
     expect(expr?.selectors[0]?.exclude).toBe(true);
     expect(expr?.selectors[1]?.spans).toEqual([{ start: -7, end: null }]);
@@ -59,7 +59,7 @@ describe('parser: IR shapes', () => {
       interval: 5,
       duration: 2
     });
-    const open = parseToIR('Y2020-*/3').ir.expressions[0]?.selectors[0]?.stride;
+    const open = parseToIR('Y2020:*/3').ir.expressions[0]?.selectors[0]?.stride;
     expect(open).toEqual({ start: 2020, end: null, interval: 3, duration: 1 });
   });
 
@@ -69,7 +69,7 @@ describe('parser: IR shapes', () => {
   });
 
   it('splits midnight-wrapping time ranges within the day', () => {
-    const { ir } = parseToIR('T2200-0600');
+    const { ir } = parseToIR('T2200:0600');
     expect(ir.expressions[0]?.time?.ranges).toEqual([
       { startMs: 0, endMs: 6 * 3_600_000 },
       { startMs: 22 * 3_600_000, endMs: 24 * 3_600_000 }
@@ -77,13 +77,13 @@ describe('parser: IR shapes', () => {
   });
 
   it('compiles time lists and precisions', () => {
-    const { ir } = parseToIR('T0900-1200,1300-1800');
+    const { ir } = parseToIR('T0900:1200,1300:1800');
     expect(ir.expressions[0]?.time?.ranges).toHaveLength(2);
     const single = parseToIR('T12').ir.expressions[0]?.time?.ranges;
     expect(single).toEqual([{ startMs: 12 * 3_600_000, endMs: 13 * 3_600_000 }]);
     const ms = parseToIR('T093015.250').ir.expressions[0]?.time?.ranges;
     expect(ms?.[0]?.endMs).toBe((ms?.[0]?.startMs as number) + 1);
-    const fullDay = parseToIR('T0000-2400').ir.expressions[0]?.time?.ranges;
+    const fullDay = parseToIR('T0000:2400').ir.expressions[0]?.time?.ranges;
     expect(fullDay).toEqual([{ startMs: 0, endMs: 86_400_000 }]);
   });
 
@@ -102,14 +102,14 @@ describe('parser: IR shapes', () => {
   });
 
   it('compiles bounds in all four forms', () => {
-    expect(parseToIR('20150101-*').ir.expressions[0]?.bounds).toEqual({
+    expect(parseToIR('20150101:*').ir.expressions[0]?.bounds).toEqual({
       start: { year: 2015, month: 1, day: 1 },
       end: null
     });
-    expect(parseToIR('*-20291231').ir.expressions[0]?.bounds?.start).toBeNull();
+    expect(parseToIR('*:20291231').ir.expressions[0]?.bounds?.start).toBeNull();
     const single = parseToIR('20180120').ir.expressions[0]?.bounds;
     expect(single?.start).toEqual(single?.end);
-    const withTime = parseToIR('*-20180120T1800').ir.expressions[0]?.bounds?.end;
+    const withTime = parseToIR('*:20180120T1800').ir.expressions[0]?.bounds?.end;
     expect(withTime).toEqual({ year: 2018, month: 1, day: 20, hour: 18, minute: 0 });
   });
 

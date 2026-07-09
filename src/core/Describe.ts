@@ -5,10 +5,11 @@ import type {
   IDTRExpIR,
   IExpressionIR,
   ISelector,
+  ISpan,
   ITimeSelector,
   Unit
 } from '../types/index.js';
-import { midnightWrap } from './Canonical.js';
+import { midnightWrap, spanWrap } from './Canonical.js';
 
 const MONTHS = [
   'January',
@@ -55,9 +56,13 @@ export function describeIR(ir: IDTRExpIR): string {
 }
 
 function describeExpression(expr: IExpressionIR): string {
+  const present = new Set(expr.selectors.map((s) => s.unit));
   const parts: Array<{ order: number; text: string }> = [];
   for (const selector of expr.selectors) {
-    parts.push({ order: ORDER[selector.unit] as number, text: describeSelector(selector) });
+    parts.push({
+      order: ORDER[selector.unit] as number,
+      text: describeSelector(selector, present)
+    });
   }
   if (expr.time) parts.push({ order: ORDER.T as number, text: describeTime(expr.time) });
   parts.sort((a, b) => a.order - b.order);
@@ -67,16 +72,23 @@ function describeExpression(expr: IExpressionIR): string {
   return rendered.join(rendered.length > 2 ? ', ' : ' ').replace(/, (until|from|on) /g, ', $1 ');
 }
 
-function describeSelector(selector: ISelector): string {
+function describeSelector(selector: ISelector, present: ReadonlySet<Unit>): string {
   const noun = UNIT_NOUNS[selector.unit];
+  const scope = scopeNoun(selector.unit, present);
   if (selector.stride) {
     const s = selector.stride;
     const from = valueName(selector.unit, s.start);
-    const through = s.end !== null ? ` through ${valueName(selector.unit, s.end)}` : '';
+    const to = s.end !== null ? ` to ${valueName(selector.unit, s.end)}` : '';
     const block = s.duration !== 1 ? `, ${s.duration} ${noun}s long` : '';
-    return `every ${ordinalWord(s.interval)} ${noun} from ${from}${through}${block}`;
+    return `every ${ordinalWord(s.interval)} ${noun} from ${from}${to}${block}`;
   }
-  const values = selector.spans.map((span) => spanName(selector.unit, span)).join(' and ');
+  const wrap = spanWrap(selector.spans);
+  if (wrap && !selector.exclude) {
+    return `from ${endpointName(selector.unit, wrap.start)} to ${endpointName(selector.unit, wrap.end)}`;
+  }
+  const values = wrap
+    ? `${valueName(selector.unit, wrap.start)} to ${valueName(selector.unit, wrap.end)}`
+    : selector.spans.map((span) => spanName(selector.unit, span, scope)).join(' and ');
   if (selector.exclude) return `every ${noun} except ${values}`;
   if (selector.ordinal !== undefined) {
     const nth =
@@ -87,6 +99,15 @@ function describeSelector(selector: ISelector): string {
           ? `${ordinalWord(-selector.ordinal)}-to-last`
           : ordinalWord(selector.ordinal);
     return `the ${nth} ${values}`;
+  }
+  // a lone true range reads as a from/to phrase with no in/on prefix (spec-locked wording)
+  const only = selector.spans.length === 1 ? (selector.spans[0] as ISpan) : undefined;
+  if (
+    only &&
+    only.start !== only.end &&
+    !(only.start !== null && only.start < 0 && only.end === null)
+  ) {
+    return rangePhrase(selector.unit, only, scope);
   }
   switch (selector.unit) {
     case 'E':
@@ -104,19 +125,108 @@ function describeSelector(selector: ISelector): string {
   }
 }
 
+/** The unit whose instance bounds a designator's domain — names the edge of an open range. */
+function scopeNoun(unit: Unit, present: ReadonlySet<Unit>): string {
+  switch (unit) {
+    case 'D':
+      return present.has('M')
+        ? 'month'
+        : present.has('Q')
+          ? 'quarter'
+          : present.has('Y')
+            ? 'year'
+            : 'month';
+    case 'W':
+    case 'M':
+    case 'Q':
+      return 'year';
+    case 'E':
+      return 'week';
+    case 'H':
+      return 'day';
+    case 'm':
+      return 'hour';
+    default:
+      return 'minute';
+  }
+}
+
+/** A single-range selector as a standalone "from X to Y" phrase. */
+function rangePhrase(unit: Unit, span: ISpan, scope: string): string {
+  if (unit === 'Y') {
+    if (span.start !== null && span.end === null) return `from ${span.start} onwards`;
+    if (span.start === null && span.end !== null) return `up to ${span.end}`;
+    return `from ${span.start} to ${span.end}`;
+  }
+  const start =
+    span.start === null
+      ? endpointName(unit, DOMAIN_MIN[unit] as number)
+      : endpointName(unit, span.start);
+  if (span.end === null) {
+    // fixed-domain units name their edge concretely; D and W have moving edges
+    const max = DOMAIN_MAX[unit];
+    return max === undefined
+      ? `from ${start} to end of ${scope}`
+      : `from ${start} to ${endpointName(unit, max)}`;
+  }
+  return `from ${start} to ${endpointName(unit, span.end)}`;
+}
+
+const DOMAIN_MIN: Partial<Record<Unit, number>> = {
+  Q: 1,
+  M: 1,
+  W: 1,
+  D: 1,
+  E: 1,
+  H: 0,
+  m: 0,
+  s: 0
+};
+/** Only fixed-size domains have a nameable max; D and W vary per instance. */
+const DOMAIN_MAX: Partial<Record<Unit, number>> = { Q: 4, M: 12, E: 7, H: 23, m: 59, s: 59 };
+
+/** An endpoint with enough words to stand alone in a from/to phrase. */
+function endpointName(unit: Unit, value: number): string {
+  if (value < 0) return valueName(unit, value);
+  switch (unit) {
+    case 'M':
+    case 'E':
+    case 'Q':
+      return valueName(unit, value);
+    default:
+      return `${UNIT_NOUNS[unit]} ${value}`;
+  }
+}
+
 function isFullNegative(selector: ISelector): boolean {
   const span = selector.spans[0];
   return selector.spans.length === 1 && span !== undefined && (span.start ?? 0) < 0;
 }
 
-function spanName(unit: Unit, span: { start: number | null; end: number | null }): string {
+function spanName(
+  unit: Unit,
+  span: { start: number | null; end: number | null },
+  scope: string
+): string {
   if (span.start === null && span.end === null) return `every ${UNIT_NOUNS[unit]}`;
-  // `D-7-*` reads as "the last 7 days"
+  // `D-7:*` reads as "the last 7 days"
   if (span.start !== null && span.start < 0 && span.end === null) {
-    return span.start === -1 ? 'the last day' : `the last ${-span.start} days`;
+    const plural = `${UNIT_NOUNS[unit]}s`;
+    return span.start === -1 ? `the last ${UNIT_NOUNS[unit]}` : `the last ${-span.start} ${plural}`;
   }
   if (span.start === span.end) return valueName(unit, span.start as number);
-  return `${valueName(unit, span.start as number)} through ${valueName(unit, span.end as number)}`;
+  // Y has no domain edge to name — open list items read "2021 onwards" / "up to 2000"
+  if (unit === 'Y' && span.end === null) return `${span.start} onwards`;
+  if (unit === 'Y' && span.start === null) return `up to ${span.end}`;
+  const start =
+    span.start === null ? valueName(unit, DOMAIN_MIN[unit] as number) : valueName(unit, span.start);
+  const end =
+    span.end === null
+      ? DOMAIN_MAX[unit] === undefined
+        ? `end of ${scope}`
+        : valueName(unit, DOMAIN_MAX[unit] as number)
+      : valueName(unit, span.end);
+  return `${start} to ${end}`;
 }
 
 function valueName(unit: Unit, value: number): string {

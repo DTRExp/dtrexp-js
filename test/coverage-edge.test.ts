@@ -43,7 +43,7 @@ describe('cadence — period/duration unit variety', () => {
 
 describe('bounds — open-end window', () => {
   it('covers an on-and-after bound', () => {
-    const dtrexp = parse('20150101-*');
+    const dtrexp = parse('20150101:*');
     expect(dtrexp.covers('2015-01-01T00:00:00Z')).toBe(true);
     expect(dtrexp.covers('2030-06-15T00:00:00Z')).toBe(true);
     expect(dtrexp.covers('2014-12-31T23:59:59Z')).toBe(false);
@@ -52,8 +52,8 @@ describe('bounds — open-end window', () => {
 
 describe('toString() — open and excluded spans', () => {
   it('renders open-ended and open-start ranges', () => {
-    expect(parse('D5-* M3').toString()).toBe('D5-* M3');
-    expect(parse('M*-5').toString()).toBe('M*-5');
+    expect(parse('D5:* M3').toString()).toBe('D5:* M3');
+    expect(parse('M*:5').toString()).toBe('M*:5');
   });
 
   it('renders an exclude-all span verbatim', () => {
@@ -67,26 +67,26 @@ describe('describe() — full-domain and single last-day', () => {
   });
 
   it('describes an open last-day range', () => {
-    expect(parse('D-1-*').describe()).toBe('on the last day');
+    expect(parse('D-1:*').describe()).toBe('on the last day');
   });
 });
 
 describe('next()/intersect() — range algebra branches', () => {
   it('merges contiguous covered hours', () => {
-    const intervals = parse('H9-17').intersect('2026-07-07T00:00:00Z', '2026-07-07T23:59:59Z');
+    const intervals = parse('H9:17').intersect('2026-07-07T00:00:00Z', '2026-07-07T23:59:59Z');
     expect(intervals).toHaveLength(1);
     expect(iso(intervals[0]?.start)).toBe('2026-07-07T09:00:00.000Z');
     expect(iso(intervals[0]?.end)).toBe('2026-07-07T18:00:00.000Z');
   });
 
   it('skips an earlier same-day window when seeking next', () => {
-    const next = parse('T0900-1200,1400-1700').next('2026-07-07T13:00:00Z');
+    const next = parse('T0900:1200,1400:1700').next('2026-07-07T13:00:00Z');
     expect(iso(next?.start)).toBe('2026-07-07T14:00:00.000Z');
     expect(iso(next?.end)).toBe('2026-07-07T17:00:00.000Z');
   });
 
   it('merges overlapping windows from union branches', () => {
-    const intervals = parse('T0900-1200 | T1100-1400').intersect(
+    const intervals = parse('T0900:1200 | T1100:1400').intersect(
       '2026-07-07T00:00:00Z',
       '2026-07-08T00:00:00Z'
     );
@@ -96,7 +96,7 @@ describe('next()/intersect() — range algebra branches', () => {
   });
 
   it('drops the day whose window falls entirely before a start-bound', () => {
-    const intervals = parse('T0900-1000 20260707T1200-20260710').intersect(
+    const intervals = parse('T0900:1000 20260707T1200:20260710').intersect(
       '2026-07-07T00:00:00Z',
       '2026-07-09T00:00:00Z'
     );
@@ -119,7 +119,7 @@ describe('final branch mop-up', () => {
   });
 
   it('maps no RRULE for bounds whose start carries a time', () => {
-    expect(parse('M3 20180120T1800-*').toRRule()).toBeNull();
+    expect(parse('M3 20180120T1800:*').toRRule()).toBeNull();
   });
 
   it('materializes a sub-day cadence that drifts off the day boundary', () => {
@@ -143,19 +143,19 @@ describe('stepper — horizon, clamp and interleave branches', () => {
   });
 
   it('returns a same-day window that ends before midnight', () => {
-    const next = parse('T0900-1200').next('2026-07-07T08:00:00Z');
+    const next = parse('T0900:1200').next('2026-07-07T08:00:00Z');
     expect(next?.start.toISOString()).toBe('2026-07-07T09:00:00.000Z');
     expect(next?.end.toISOString()).toBe('2026-07-07T12:00:00.000Z');
   });
 
   it('returns an interval that runs to the bounded horizon', () => {
-    const next = parse('20260708-20260709').next('2026-07-07T12:00:00Z');
+    const next = parse('20260708:20260709').next('2026-07-07T12:00:00Z');
     expect(next?.start.toISOString()).toBe('2026-07-08T00:00:00.000Z');
     expect(next?.end.toISOString()).toBe('2026-07-10T00:00:00.000Z');
   });
 
   it('intersects a time window with a cadence spanning both range orderings', () => {
-    const intervals = parse('T0700-1400 20200106T0000/6H/2H').intersect(
+    const intervals = parse('T0700:1400 20200106T0000/6H/2H').intersect(
       '2020-01-06T00:00:00Z',
       '2020-01-07T00:00:00Z'
     );

@@ -4,12 +4,12 @@ import { expectSyntaxError } from './helpers.js';
 /** Each entry: expression → expected error code. Covers the paths not in vectors.json. */
 const cases: Array<[string, string]> = [
   ['T12 T14', 'duplicate-designator'],
-  ['E1-3#2', 'bad-ordinal'],
+  ['E1:3#2', 'bad-ordinal'],
   ['E1,2#2', 'bad-ordinal'],
   ['E*#2', 'bad-ordinal'],
   ['M!3/2', 'stride-with-exclusion'],
   ['M-0', 'bad-value'],
-  ['T1200-1200', 'empty-time-range'],
+  ['T1200:1200', 'empty-time-range'],
   ['T123', 'bad-time-value'],
   ['T093015.25', 'bad-time-value'],
   ['T2400', 'bad-time-value'],
@@ -22,13 +22,14 @@ const cases: Array<[string, string]> = [
   ['20200101/0M', 'zero-cadence-period'],
   ['M-13', 'out-of-domain'],
   ['E-8', 'out-of-domain'],
-  ['M3-15/2', 'out-of-domain'],
-  ['M5-3', 'backwards-range'],
+  ['M3:15/2', 'out-of-domain'],
+  ['Y2030:2020', 'backwards-range'],
+  ['M11:2/2', 'stride-on-wrap'],
   ['20180001', 'bad-date-literal'], // month 0
   ['20181301', 'bad-date-literal'], // month 13
   ['20180100', 'bad-date-literal'], // day 0
   ['20180230', 'bad-date-literal'], // Feb 30 does not exist
-  ['20180301-20170301', 'backwards-bounds'],
+  ['20180301:20170301', 'backwards-bounds'],
   ['20200101/8D/9D', 'cadence-duration'], // duration >= period
   ['20200101/10D/1X', 'bad-cadence-unit'],
   ['Q0', 'out-of-domain'],
@@ -42,7 +43,7 @@ const cases: Array<[string, string]> = [
 /** Template / readInt messages must retain their interpolated, meaningful text. */
 const messageWords: Array<[string, string]> = [
   ['M-13', 'domain'],
-  ['M5-3', 'Backwards'],
+  ['Y2030:2020', 'Backwards'],
   ['20180230', 'calendar date'],
   ['T2500', 'Hour'],
   ['M3/14', 'exceeds'],
@@ -95,7 +96,7 @@ describe('parser: valid edge forms that must parse', () => {
   });
 
   it('accepts a full-day time range and a bare hour', () => {
-    expect(parse('T0000-2400').covers('2026-07-07T23:59:00Z')).toBe(true);
+    expect(parse('T0000:2400').covers('2026-07-07T23:59:00Z')).toBe(true);
     expect(parse('T12').covers('2026-07-07T12:30:00Z')).toBe(true);
   });
 

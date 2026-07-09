@@ -207,8 +207,8 @@ describe('describe/toString — branch outputs', () => {
     expect(d('E7#-2 M6')).toBe('the 2nd-to-last Sunday in June');
     expect(d('W16')).toBe('in week 16');
     expect(d('H0/4')).toBe('every 4th hour from 0');
-    expect(d('D-3-*')).toBe('on the last 3 days');
-    expect(d('D-1-*')).toBe('on the last day');
+    expect(d('D-3:*')).toBe('on the last 3 days');
+    expect(d('D-1:*')).toBe('on the last day');
     expect(d('M-2')).toBe('in 2nd-to-last');
     expect(d('20200106/2W/1D')).toBe('every 2 weeks from 2020-01-06, 1 day long');
   });
@@ -216,13 +216,13 @@ describe('describe/toString — branch outputs', () => {
   it('renders every toString branch', () => {
     expect(ts('M3')).toBe('M3');
     expect(ts('D*')).toBe('D*');
-    expect(ts('T0900-1800')).toBe('T0900-1800'); // non-wrap T keeps its 'T' prefix
-    expect(ts('T0900-1200,1300-1800')).toBe('T0900-1200,1300-1800'); // multi-range join + separator
-    expect(ts('T120000-130000')).toBe('T1200-1300'); // whole-hour bounds drop the seconds
-    expect(ts('T093015-093016')).toBe('T093015-093016');
-    expect(ts('T093015.250-093015.500')).toBe('T093015.250-093015.500');
-    expect(ts('T120000.250-120000.251')).toBe('T120000.250-120000.251'); // ss=0 but frac≠0 → seconds still shown
-    expect(ts('T093015.050-093015.051')).toBe('T093015.050-093015.051'); // frac<100 → needs zero-padding
+    expect(ts('T0900:1800')).toBe('T0900:1800'); // non-wrap T keeps its 'T' prefix
+    expect(ts('T0900:1200,1300:1800')).toBe('T0900:1200,1300:1800'); // multi-range join + separator
+    expect(ts('T120000:130000')).toBe('T1200:1300'); // whole-hour bounds drop the seconds
+    expect(ts('T093015:093016')).toBe('T093015:093016');
+    expect(ts('T093015.250:093015.500')).toBe('T093015.250:093015.500');
+    expect(ts('T120000.250:120000.251')).toBe('T120000.250:120000.251'); // ss=0 but frac≠0 → seconds still shown
+    expect(ts('T093015.050:093015.051')).toBe('T093015.050:093015.051'); // frac<100 → needs zero-padding
     expect(ts('20200106/10D/3D')).toBe('20200106/10D/3D');
     expect(ts('20200106/10D')).toBe('20200106/10D');
     expect(ts('20180120')).toBe('20180120'); // bare date literal
@@ -231,8 +231,8 @@ describe('describe/toString — branch outputs', () => {
 
   it('drops a full-domain span only when the selector is a lone full domain', () => {
     expect(ts('M*,5')).toBe('M*,5'); // first span is full-domain but it is a list → not dropped
-    expect(ts('M5-*')).toBe('M5-*'); // open-end span → not full-domain
-    expect(ts('M*-5')).toBe('M*-5'); // open-start span → not full-domain
+    expect(ts('M5:*')).toBe('M5:*'); // open-end span → not full-domain
+    expect(ts('M*:5')).toBe('M*:5'); // open-start span → not full-domain
   });
 });
 
@@ -278,17 +278,17 @@ describe('describe — exhaustive names and ordinal suffixes', () => {
   });
 
   it('renders ordinal suffixes for teens and non-teens', () => {
-    expect(d('Y2000-2100/11')).toBe('every 11th year from 2000 through 2100');
-    expect(d('Y2000-2100/12')).toBe('every 12th year from 2000 through 2100');
-    expect(d('Y2000-2100/13')).toBe('every 13th year from 2000 through 2100');
-    expect(d('Y2000-2100/21')).toBe('every 21st year from 2000 through 2100');
-    expect(d('Y2000-2100/22')).toBe('every 22nd year from 2000 through 2100');
-    expect(d('Y2000-2100/23')).toBe('every 23rd year from 2000 through 2100');
+    expect(d('Y2000:2100/11')).toBe('every 11th year from 2000 to 2100');
+    expect(d('Y2000:2100/12')).toBe('every 12th year from 2000 to 2100');
+    expect(d('Y2000:2100/13')).toBe('every 13th year from 2000 to 2100');
+    expect(d('Y2000:2100/21')).toBe('every 21st year from 2000 to 2100');
+    expect(d('Y2000:2100/22')).toBe('every 22nd year from 2000 to 2100');
+    expect(d('Y2000:2100/23')).toBe('every 23rd year from 2000 to 2100');
   });
 
   it('describes a positive day-of-month, week and time-with-seconds', () => {
     expect(d('D5 M3')).toBe('on day 5 in March');
-    expect(d('T093015-100000')).toBe('09:30:15–10:00'); // seconds on start
+    expect(d('T093015:100000')).toBe('09:30:15–10:00'); // seconds on start
     expect(d('s30')).toBe('at second 30');
     expect(d('H12')).toBe('at hour 12');
   });

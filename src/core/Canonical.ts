@@ -62,16 +62,31 @@ function renderExpression(expr: IExpressionIR): string {
 function renderSelector(selector: ISelector): string {
   if (selector.stride) {
     const s = selector.stride;
-    const end = s.end !== null ? `-${s.end}` : '';
+    const end = s.end !== null ? `:${s.end}` : '';
     const duration = s.duration !== 1 ? `/${s.duration}` : '';
     return `${selector.unit}${s.start}${end}/${s.interval}${duration}`;
   }
   // full-domain plain selectors (`Y*`) are redundant — dropped unless alone.
   // (an ordinal selector always carries a concrete weekday, so it is never full-domain)
   if (!selector.exclude && isFullDomain(selector)) return '';
-  const spans = selector.spans.map(renderSpan).join(',');
+  const wrap = spanWrap(selector.spans);
+  const spans = wrap ? `${wrap.start}:${wrap.end}` : selector.spans.map(renderSpan).join(',');
   const ordinal = selector.ordinal !== undefined ? `#${selector.ordinal}` : '';
   return `${selector.unit}${selector.exclude ? '!' : ''}${spans}${ordinal}`;
+}
+
+/**
+ *  Detects a parser-split wrap range (`[s, edge]` + `[domain start, e]` with `s > e`)
+ *  and returns the fused `s:e` pair, else `null`. Shared by canonical and describe.
+ */
+export function spanWrap(spans: ISpan[]): { start: number; end: number } | null {
+  if (spans.length !== 2) return null;
+  const up = spans.find((s) => s.start !== null && s.start > 0 && s.end === null);
+  const down = spans.find((s) => s.start === null && s.end !== null && s.end > 0);
+  if (up && down && (up.start as number) > (down.end as number)) {
+    return { start: up.start as number, end: down.end as number };
+  }
+  return null;
 }
 
 function isFullDomain(selector: ISelector): boolean {
@@ -83,13 +98,13 @@ function isFullDomain(selector: ISelector): boolean {
 function renderSpan(span: { start: number | null; end: number | null }): string {
   if (span.start === null && span.end === null) return '*';
   if (span.start === span.end) return String(span.start);
-  return `${span.start ?? '*'}-${span.end ?? '*'}`;
+  return `${span.start ?? '*'}:${span.end ?? '*'}`;
 }
 
 function renderTime(time: ITimeSelector): string {
   const wrap = midnightWrap(time.ranges);
-  if (wrap) return `T${fmtTime(wrap.startMs)}-${fmtTime(wrap.endMs)}`;
-  return `T${time.ranges.map((range) => `${fmtTime(range.startMs)}-${fmtTime(range.endMs)}`).join(',')}`;
+  if (wrap) return `T${fmtTime(wrap.startMs)}:${fmtTime(wrap.endMs)}`;
+  return `T${time.ranges.map((range) => `${fmtTime(range.startMs)}:${fmtTime(range.endMs)}`).join(',')}`;
 }
 
 function fmtTime(ms: number): string {
@@ -114,7 +129,7 @@ function renderBounds(bounds: IBounds): string {
   if (bounds.start && bounds.start === bounds.end) return renderLiteral(bounds.start);
   const start = bounds.start ? renderLiteral(bounds.start) : '*';
   const end = bounds.end ? renderLiteral(bounds.end) : '*';
-  return `${start}-${end}`;
+  return `${start}:${end}`;
 }
 
 export function renderLiteral(literal: IDateLiteral): string {

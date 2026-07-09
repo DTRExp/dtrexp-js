@@ -12,6 +12,22 @@ describe('validate()', () => {
     expect(result.warnings[0]?.code).toBe('unsatisfiable');
   });
 
+  it('warns when the selected months never fall inside the selected quarters', () => {
+    // negatives resolve against their own scope: M-1 is December (spec §2, §9.1)
+    expect(validate('M-1 Q1').warnings[0]?.code).toBe('unsatisfiable');
+    expect(validate('M-2 Q2').warnings[0]?.code).toBe('unsatisfiable');
+    expect(validate('M12,1 Q2:3').warnings[0]?.code).toBe('unsatisfiable');
+  });
+
+  it('stays quiet when months and quarters do intersect', () => {
+    expect(validate('M3 Q1').warnings).toEqual([]);
+    expect(validate('M-1 Q4').warnings).toEqual([]);
+    expect(validate('M11:2 Q1').warnings).toEqual([]); // wrap reaches Jan–Feb
+    expect(validate('M* Q2').warnings).toEqual([]);
+    expect(validate('M!3 Q1').warnings).toEqual([]); // exclusions are skipped
+    expect(validate('M1/3 Q2').warnings).toEqual([]); // strides are skipped
+  });
+
   it('reports errors without throwing', () => {
     const result = validate('M13');
     expect(result.valid).toBe(false);

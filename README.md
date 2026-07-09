@@ -13,13 +13,13 @@
 
 > This module is **ESM** 🔆. Please [**read this**](https://gist.github.com/onury/d3f3d765d7db2e8b2d050d14315f2ac7).
 
-Reference TypeScript implementation of **[DTRExp](https://github.com/DTRExp/dtrexp-spec)** — a compact string expression for date-time ranges and recursion, evaluated by **coverage** rather than enumeration.
+Reference TypeScript implementation of **[DTRExp](https://github.com/DTRExp/dtrexp)** — a compact string expression for date-time ranges and recursion, evaluated by **coverage** rather than enumeration.
 
 ```
-T0900-1800 E1-5          Mon–Fri, 09:00–18:00
+T0900:1800 E1:5          Mon–Fri, 09:00–18:00
 E7#-1 M4                 last Sunday of April, every year
 20200106/10D             every 10 days from 2020-01-06 (cron can't say this)
-D-7-* Y*                 last 7 days of every year
+D-7:* Y*                 last 7 days of every year
 M!7                      every month except July
 ```
 
@@ -38,7 +38,7 @@ Requires Node.js ≥ 22. Zero runtime dependencies.
 ```ts
 import { parse } from 'dtrexp';
 
-const businessHours = parse('T0900-1800 E1-5');
+const businessHours = parse('T0900:1800 E1:5');
 
 // coverage — O(#components), built for per-request hot paths
 businessHours.covers(new Date(), { tz: 'Europe/Berlin' });
@@ -86,29 +86,29 @@ parse('D25 M12').toRRule();
 ### Inputs & options
 
 - **Instants** (`DateInput`): `Date`, epoch milliseconds, ISO 8601 string, or any Temporal-like object exposing `epochMilliseconds` — no Temporal dependency.
-- **`opts.tz`**: IANA time zone for evaluation, default `'UTC'`. The zone is always an **evaluation parameter**, never part of the expression — `T0900-1800` means local business hours wherever you evaluate it. DST is handled per spec §9.3: spring-forward gap times cover nothing; repeated fall-back times are covered on both passes.
+- **`opts.tz`**: IANA time zone for evaluation, default `'UTC'`. The zone is always an **evaluation parameter**, never part of the expression — `T0900:1800` means local business hours wherever you evaluate it. DST is handled per spec §9.3: spring-forward gap times cover nothing; repeated fall-back times are covered on both passes.
 
-## Expression syntax (spec draft 2)
+## Expression syntax (spec draft 2.1)
 
-The full grammar and semantics live in the **[specification](https://github.com/DTRExp/dtrexp-spec/blob/main/draft-2.md)**; the essentials:
+The full grammar and semantics live in the **[specification](https://github.com/DTRExp/dtrexp/blob/main/draft-2.md)**; the essentials:
 
 | Component | Example | Meaning |
 | --- | --- | --- |
-| Selectors | `M3-7`, `E1-5`, `D1,15`, `W53`, `Q2`, `Y2018` | inclusive values/ranges/lists per calendar unit |
-| Negative index | `D-1`, `D-7-*` | from the end of the actual parent (last day — leap-safe) |
-| Exclusion | `M!5,7-9` | domain minus the set |
+| Selectors | `M3:7`, `E1:5`, `D1,15`, `W53`, `Q2`, `Y2018` | inclusive values/ranges/lists per calendar unit |
+| Negative index | `D-1`, `D-7:*` | from the end of the actual parent (last day — leap-safe) |
+| Exclusion | `M!5,7:9` | domain minus the set |
 | Ordinal | `E7#2`, `E7#-1` | nth / nth-from-last weekday in scope |
-| Time of day | `T0900-1200,1300-1800`, `T2200-0600` | half-open clock ranges; midnight wrap stays within the day |
-| Stride | `H0/4`, `M1/5/2`, `Y2020-2040/3` | calendar-locked repetition — `/interval[/duration]` |
+| Time of day | `T0900:1200,1300:1800`, `T2200:0600` | half-open clock ranges; midnight wrap stays within the day |
+| Stride | `H0/4`, `M1/5/2`, `Y2020:2040/3` | calendar-locked repetition — `/interval[/duration]` |
 | Cadence | `20200106/10D/3D`, `20180301/14M` | anchor-based repetition that drifts across the calendar |
-| Bounds | `20150101-*`, `*-20291231`, `20180120` | absolute window / single day |
+| Bounds | `20150101:*`, `*:20291231`, `20180120` | absolute window / single day |
 | Union | `E5#1 \| E5#3` | either expression |
 
-Components in one expression **intersect**; `T0900-1800 E1-5 M!8` reads naturally as *"9–18, on weekdays, except in August."*
+Components in one expression **intersect**; `T0900:1800 E1:5 M!8` reads naturally as *"9–18, on weekdays, except in August."*
 
 ## Quality
 
-- **Conformance-first:** the test suite is driven by the shared [`vectors.json`](https://github.com/DTRExp/dtrexp-spec/blob/main/vectors.json) from the spec repo — every coverage, rejection and warning vector, including the calendar traps (Feb 29 in 2000/2024/**2100**, `W53` existence, DST gap/overlap in `Europe/Berlin`, constrain arithmetic on month-end anchors).
+- **Conformance-first:** the test suite is driven by the shared [`vectors.json`](https://github.com/DTRExp/dtrexp/blob/main/vectors.json) from the spec repo — every coverage, rejection and warning vector, including the calendar traps (Feb 29 in 2000/2024/**2100**, `W53` existence, DST gap/overlap in `Europe/Berlin`, constrain arithmetic on month-end anchors).
 - **100% coverage** on all four metrics (lines, statements, functions, branches), enforced as hard thresholds in CI.
 - **100% mutation score** ([Stryker](https://stryker-mutator.io/), `break: 100`) — inclusivity mutants (`<` vs `<=`) are exactly the class of bug a date-range library must not ship, and line coverage alone can't catch them.
 - **CI matrix** on Node 22 / 24 / 26, gate ladder `typecheck → lint → build → cover` plus a dedicated mutation job.
@@ -116,7 +116,7 @@ Components in one expression **intersect**; `T0900-1800 E1-5 M!8` reads naturall
 
 ## Related projects
 
-- [**dtrexp-spec**](https://github.com/DTRExp/dtrexp-spec) — the DTRExp specification (grammar, semantics, conformance vectors) this package implements.
+- [**dtrexp** (spec)](https://github.com/DTRExp/dtrexp) — the DTRExp specification (grammar, semantics, conformance vectors) this package implements.
 
 ## License
 

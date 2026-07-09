@@ -157,7 +157,7 @@ class Parser {
 
   private parseSpan(unit: Unit): { span: ISpan; isRange: boolean } {
     const start = this.parseEndpoint(unit);
-    if (this.src[this.pos] === '-') {
+    if (this.src[this.pos] === ':') {
       this.pos++;
       return { span: { start, end: this.parseEndpoint(unit) }, isRange: true };
     }
@@ -235,7 +235,7 @@ class Parser {
     const ranges: ITimeRange[] = [];
     for (;;) {
       const start = this.parseTimeValue(false);
-      if (this.src[this.pos] === '-') {
+      if (this.src[this.pos] === ':') {
         this.pos++;
         const opPos = this.pos;
         const end = this.parseTimeValue(true);
@@ -290,14 +290,14 @@ class Parser {
   private parseDateComponent(): ICadence | IBounds {
     if (this.src[this.pos] === '*') {
       this.pos++;
-      if (this.src[this.pos] !== '-') this.fail('bad-bounds', "Expected '-' after '*'", this.pos);
+      if (this.src[this.pos] !== ':') this.fail('bad-bounds', "Expected ':' after '*'", this.pos);
       this.pos++;
       return { start: null, end: this.parseDateLiteral() };
     }
     const start = this.parseDateLiteral();
     const next = this.src[this.pos];
     if (next === '/') return this.parseCadenceTail(start);
-    if (next === '-') {
+    if (next === ':') {
       this.pos++;
       if (this.src[this.pos] === '*') {
         this.pos++;
@@ -427,6 +427,7 @@ class Parser {
         const ok = v < 0 ? v >= -size : v >= min && v <= max;
         if (!ok) this.fail('out-of-domain', `Value ${v} out of domain for '${node.unit}'`, pos);
       };
+      const spans: ISpan[] = [];
       for (const span of node.spans) {
         checkValue(span.start);
         checkValue(span.end);
@@ -437,12 +438,27 @@ class Parser {
           span.end > 0 &&
           span.start > span.end
         ) {
-          this.fail('backwards-range', `Backwards range in '${node.unit}'`, pos);
+          // wrap range (spec §3): start → domain edge, plus domain start → end.
+          // Y is the one designator with no edge to wrap around.
+          if (node.unit === 'Y') {
+            this.fail('backwards-range', `Backwards range in 'Y' — years cannot wrap`, pos);
+          }
+          spans.push({ start: span.start, end: null }, { start: null, end: span.end });
+        } else {
+          spans.push(span);
         }
       }
+      node.spans = spans;
       if (node.stride) {
         checkValue(node.stride.start);
         checkValue(node.stride.end);
+        if (
+          node.stride.end !== null &&
+          node.stride.end > 0 &&
+          node.stride.start > node.stride.end
+        ) {
+          this.fail('stride-on-wrap', 'A stride range cannot wrap', pos);
+        }
         if (node.unit !== 'Y' && node.stride.interval > size) {
           this.fail(
             'stride-interval-domain',
@@ -459,6 +475,42 @@ class Parser {
       }
     }
     this.lintUnsatisfiableDay(selectors);
+    this.lintUnsatisfiableMonthQuarter(selectors);
+  }
+
+  /** `M-1 Q1` parses but December ∩ Q1 is empty — spec §9.1 says warn, don't error (spec §2). */
+  private lintUnsatisfiableMonthQuarter(selectors: IPositioned<ISelector>[]): void {
+    const monthSel = selectors.find((s) => s.node.unit === 'M' && !s.node.exclude);
+    const quarterSel = selectors.find((s) => s.node.unit === 'Q' && !s.node.exclude);
+    if (!monthSel || !quarterSel || monthSel.node.stride || quarterSel.node.stride) return;
+    // M and Q have fixed domains, so every span resolves statically
+    const resolve = (spans: ISpan[], max: number): Set<number> => {
+      const out = new Set<number>();
+      for (const span of spans) {
+        const at = (v: number | null, edge: number): number =>
+          v === null ? edge : v < 0 ? max + 1 + v : v;
+        const lo = at(span.start, 1);
+        const hi = at(span.end, max);
+        for (let v = lo; v <= hi; v++) out.add(v);
+      }
+      return out;
+    };
+    const months = resolve(monthSel.node.spans, 12);
+    const quarterMonths = new Set<number>();
+    for (const q of resolve(quarterSel.node.spans, 4)) {
+      quarterMonths
+        .add(q * 3 - 2)
+        .add(q * 3 - 1)
+        .add(q * 3);
+    }
+    if (![...months].some((m) => quarterMonths.has(m))) {
+      this.warnings.push({
+        code: 'unsatisfiable',
+        message:
+          'The selected month(s) never fall inside the selected quarter(s) — this expression covers nothing',
+        position: monthSel.pos
+      });
+    }
   }
 
   /** `D30 M2` parses but can never match — spec §9.1 says warn, don't error. */
