@@ -165,3 +165,80 @@ describe('stepper — horizon, clamp and interleave branches', () => {
     ]);
   });
 });
+
+describe('cadence window edges and D-scoping with coexisting coarser selectors', () => {
+  const c = (e: string, i: string, tz?: string) => parse(e).covers(i, tz ? { tz } : undefined);
+
+  // D follows the nearest of M/Q/Y — with M present, Q must not steal the scope
+  it('keeps D month-scoped when M and Q are both present', () => {
+    expect(c('D5 M2 Q1', '2024-02-05T12:00:00Z')).toBe(true);
+    expect(c('D-1 M2 Q1', '2024-02-29T12:00:00Z')).toBe(true); // domain max = 29, not 91
+    expect(c('E7#-1 M4 Q2', '2024-04-28T12:00:00Z')).toBe(true); // last Sunday of April, not of Q2
+    expect(c('E7#-1 M4 Q2', '2024-06-30T12:00:00Z')).toBe(false); // last Sunday of Q2 must NOT match
+  });
+
+  it('stops a stride at its explicit end', () => {
+    expect(c('M1:6/2', '2024-05-15T12:00:00Z')).toBe(true);
+    expect(c('M1:6/2', '2024-07-15T12:00:00Z')).toBe(false); // resolved end must clamp, not leak
+  });
+
+  // occurrence search starts at k = 0: nothing is covered before the anchor,
+  // in any of the three window generators (month, day-pseudo, absolute)
+  it('covers nothing before the anchor', () => {
+    expect(c('20240301/3M/1M', '2023-12-15T12:00:00Z')).toBe(false);
+    expect(c('20200106/10D', '2019-12-27T12:00:00Z')).toBe(false);
+    expect(c('20200106T0000/6H/1H', '2020-01-05T18:30:00Z')).toBe(false);
+  });
+
+  it('treats window boundaries as half-open in every generator', () => {
+    expect(c('20200106T0000/6H/1H', '2020-01-06T06:00:00Z')).toBe(true); // exact start covered
+    expect(c('20200106T0000/6H/1H', '2020-01-06T01:00:00Z')).toBe(false); // exact end not covered
+    expect(c('20240301/3M/1M', '2024-03-01T00:00:00Z')).toBe(true);
+    expect(c('20240301/3M/1M', '2024-02-29T23:59:59.999Z')).toBe(false); // 1 ms before the window
+  });
+
+  it('honours a time-of-day anchor in day-period windows', () => {
+    expect(c('20200106T0600/2D/1D', '2020-01-06T03:00:00Z')).toBe(false); // before 06:00 start
+    expect(c('20200106T0600/2D/1D', '2020-01-07T03:00:00Z')).toBe(true); // inside [Jan6 06:00, Jan7 06:00)
+    const nx = parse('20200106T0600/2D/1D').next('2020-01-06T00:00:00Z');
+    expect(nx?.start.toISOString()).toBe('2020-01-06T06:00:00.000Z');
+    expect(nx?.end.toISOString()).toBe('2020-01-07T06:00:00.000Z');
+  });
+
+  it('returns real interval pairs from the month-window generator', () => {
+    const iv = parse('20240131/3M/1D').intersect('2024-01-01T00:00:00Z', '2024-12-31T00:00:00Z');
+    expect(iv.map((x) => x.start.toISOString().slice(0, 10))).toEqual([
+      '2024-01-31',
+      '2024-04-30',
+      '2024-07-31',
+      '2024-10-31'
+    ]);
+  });
+
+  it('aligns sub-day windows to the local clock of the evaluation zone', () => {
+    // anchored at Berlin local midnight = 2020-01-05T23:00Z; every 6th local hour
+    const iv = parse('20200106T0000/6H/1H').intersect(
+      '2020-01-06T03:30:00Z',
+      '2020-01-06T15:00:00Z',
+      { tz: 'Europe/Berlin' }
+    );
+    expect(iv.map((x) => `${x.start.toISOString()}..${x.end.toISOString()}`)).toEqual([
+      '2020-01-06T05:00:00.000Z..2020-01-06T06:00:00.000Z',
+      '2020-01-06T11:00:00.000Z..2020-01-06T12:00:00.000Z'
+    ]);
+  });
+});
+
+describe('month-period windows honour a time-of-day anchor', () => {
+  it('starts each occurrence at the anchor clock time', () => {
+    // windows [Jan 1 12:00, Jan 2 12:00), [Feb 1 12:00, Feb 2 12:00), …
+    expect(parse('20240101T1200/1M/1D').covers('2024-02-01T06:00:00Z')).toBe(false);
+    expect(parse('20240101T1200/1M/1D').covers('2024-02-01T18:00:00Z')).toBe(true);
+  });
+
+  it('ends a month-long duration at the anchor clock time', () => {
+    // window [Jan 1 12:00, Feb 1 12:00): Feb 1 06:00 in, Feb 1 18:00 out
+    expect(parse('20240101T1200/3M/1M').covers('2024-02-01T06:00:00Z')).toBe(true);
+    expect(parse('20240101T1200/3M/1M').covers('2024-02-01T18:00:00Z')).toBe(false);
+  });
+});
