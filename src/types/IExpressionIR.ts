@@ -11,7 +11,7 @@ export interface IExpressionIR {
   bounds?: IBounds;
 }
 
-/** A full compiled DTRE: the union of its expressions. */
-export interface IDtreIR {
+/** A full compiled DTRExp: the union of its expressions. */
+export interface IDTRExpIR {
   expressions: IExpressionIR[];
 }

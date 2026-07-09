@@ -1,6 +1,6 @@
 import type {
   IDateLiteral,
-  IDtreIR,
+  IDTRExpIR,
   IExpressionIR,
   IFields,
   IInterval,
@@ -43,7 +43,7 @@ interface IExprPlan {
   secondCovered: boolean[] | null;
 }
 
-function planFor(ir: IDtreIR): IExprPlan[] {
+function planFor(ir: IDTRExpIR): IExprPlan[] {
   return ir.expressions.map((expr) => {
     const hourSel = expr.selectors.find((s) => s.unit === 'H');
     const minuteSel = expr.selectors.find((s) => s.unit === 'm');
@@ -125,7 +125,7 @@ function dayCoverage(plans: IExprPlan[], day: number, tz: string): IRange[] {
  *  sorted, merged list (spec §9 derived operations).
  */
 export function intersectWindow(
-  ir: IDtreIR,
+  ir: IDTRExpIR,
   startEpoch: number,
   endEpoch: number,
   tz: string
@@ -158,7 +158,7 @@ export function intersectWindow(
  *  Coverage containing `afterEpoch` is skipped ("when does it *next* apply").
  *  Returns `null` when nothing starts before the year-9999 horizon.
  */
-export function nextInterval(ir: IDtreIR, afterEpoch: number, tz: string): IInterval | null {
+export function nextInterval(ir: IDTRExpIR, afterEpoch: number, tz: string): IInterval | null {
   const plans = planFor(ir);
   const afterPseudo = fieldsFromInstant(afterEpoch, tz).pseudo;
 

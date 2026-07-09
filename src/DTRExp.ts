@@ -4,10 +4,10 @@ import { coversInstant } from './core/Evaluator.js';
 import { parseToIR } from './core/Parser.js';
 import { toRRuleString } from './core/RRule.js';
 import { intersectWindow, nextInterval } from './core/Stepper.js';
-import { DTRESyntaxError } from './DTRESyntaxError.js';
+import { DTRExpSyntaxError } from './DTRExpSyntaxError.js';
 import type {
   DateInput,
-  IDtreIR,
+  IDTRExpIR,
   IEvalOptions,
   IInterval,
   IIssue,
@@ -15,22 +15,22 @@ import type {
 } from './types/index.js';
 
 /**
- *  A parsed, immutable DTRE expression. Construct via {@link parse}; parse once
+ *  A parsed, immutable DTRExp expression. Construct via {@link parse}; parse once
  *  at write-time, evaluate per-request — `covers()` is O(#components).
  */
-export class DTRE {
+export class DTRExp {
   /** The original expression, verbatim. */
   readonly source: string;
-  private readonly ir: IDtreIR;
+  private readonly ir: IDTRExpIR;
 
-  private constructor(source: string, ir: IDtreIR) {
+  private constructor(source: string, ir: IDTRExpIR) {
     this.source = source;
     this.ir = ir;
   }
 
   /** @internal Used by {@link parse} — not part of the public API. */
-  static _create(source: string, ir: IDtreIR): DTRE {
-    return new DTRE(source, ir);
+  static _create(source: string, ir: IDTRExpIR): DTRExp {
+    return new DTRExp(source, ir);
   }
 
   /**
@@ -96,20 +96,20 @@ export class DTRE {
   }
 
   /** @internal The compiled IR — consumed by the evaluator layers. */
-  get _ir(): IDtreIR {
+  get _ir(): IDTRExpIR {
     return this.ir;
   }
 }
 
 /**
- *  Parses a DTRE expression. The only way to construct a {@link DTRE}.
- *  Throws {@link DTRESyntaxError} with a position and stable `code` on invalid input.
+ *  Parses a DTRExp expression. The only way to construct a {@link DTRExp}.
+ *  Throws {@link DTRExpSyntaxError} with a position and stable `code` on invalid input.
  *
  *  @example
  *  const businessHours = parse('T0900-1800 E1-5');
  */
-export function parse(expression: string): DTRE {
-  return DTRE._create(expression, parseToIR(expression).ir);
+export function parse(expression: string): DTRExp {
+  return DTRExp._create(expression, parseToIR(expression).ir);
 }
 
 /**
@@ -124,7 +124,7 @@ export function validate(expression: string): IValidationResult {
     const { warnings } = parseToIR(expression);
     return { valid: true, errors: [], warnings };
   } catch (err) {
-    const e = err as DTRESyntaxError;
+    const e = err as DTRExpSyntaxError;
     const issue: IIssue = { code: e.code, message: e.message, position: e.position };
     return { valid: false, errors: [issue], warnings: [] };
   }

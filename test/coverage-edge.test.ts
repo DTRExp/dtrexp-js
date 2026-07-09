@@ -4,31 +4,31 @@ const iso = (d: Date | undefined): string | undefined => d?.toISOString();
 
 describe('cadence — period/duration unit variety', () => {
   it('covers a week-period cadence', () => {
-    const dtre = parse('20200106/2W'); // biweekly Mondays from 2020-01-06
-    expect(dtre.covers('2020-01-06T12:00:00Z')).toBe(true);
-    expect(dtre.covers('2020-01-13T12:00:00Z')).toBe(false);
-    expect(dtre.covers('2020-01-20T12:00:00Z')).toBe(true);
+    const dtrexp = parse('20200106/2W'); // biweekly Mondays from 2020-01-06
+    expect(dtrexp.covers('2020-01-06T12:00:00Z')).toBe(true);
+    expect(dtrexp.covers('2020-01-13T12:00:00Z')).toBe(false);
+    expect(dtrexp.covers('2020-01-20T12:00:00Z')).toBe(true);
   });
 
   it('covers a minute-period cadence', () => {
-    const dtre = parse('20200106T0000/30m/1m');
-    expect(dtre.covers('2020-01-06T00:00:30Z')).toBe(true);
-    expect(dtre.covers('2020-01-06T00:30:30Z')).toBe(true);
-    expect(dtre.covers('2020-01-06T00:15:00Z')).toBe(false);
+    const dtrexp = parse('20200106T0000/30m/1m');
+    expect(dtrexp.covers('2020-01-06T00:00:30Z')).toBe(true);
+    expect(dtrexp.covers('2020-01-06T00:30:30Z')).toBe(true);
+    expect(dtrexp.covers('2020-01-06T00:15:00Z')).toBe(false);
   });
 
   it('covers a year-period / year-duration cadence', () => {
-    const dtre = parse('20200101/3Y/1Y'); // one full year, every 3 years
-    expect(dtre.covers('2020-06-15T00:00:00Z')).toBe(true);
-    expect(dtre.covers('2021-06-15T00:00:00Z')).toBe(false);
-    expect(dtre.covers('2023-06-15T00:00:00Z')).toBe(true);
+    const dtrexp = parse('20200101/3Y/1Y'); // one full year, every 3 years
+    expect(dtrexp.covers('2020-06-15T00:00:00Z')).toBe(true);
+    expect(dtrexp.covers('2021-06-15T00:00:00Z')).toBe(false);
+    expect(dtrexp.covers('2023-06-15T00:00:00Z')).toBe(true);
   });
 
   it('covers a month-period / month-duration cadence', () => {
-    const dtre = parse('20240131/3M/1M'); // one month long, every 3 months, from Jan 31
-    expect(dtre.covers('2024-02-15T00:00:00Z')).toBe(true);
-    expect(dtre.covers('2024-03-15T00:00:00Z')).toBe(false);
-    expect(dtre.covers('2024-04-30T00:00:00Z')).toBe(true);
+    const dtrexp = parse('20240131/3M/1M'); // one month long, every 3 months, from Jan 31
+    expect(dtrexp.covers('2024-02-15T00:00:00Z')).toBe(true);
+    expect(dtrexp.covers('2024-03-15T00:00:00Z')).toBe(false);
+    expect(dtrexp.covers('2024-04-30T00:00:00Z')).toBe(true);
   });
 
   it('materializes a week-duration cadence window', () => {
@@ -43,10 +43,10 @@ describe('cadence — period/duration unit variety', () => {
 
 describe('bounds — open-end window', () => {
   it('covers an on-and-after bound', () => {
-    const dtre = parse('20150101-*');
-    expect(dtre.covers('2015-01-01T00:00:00Z')).toBe(true);
-    expect(dtre.covers('2030-06-15T00:00:00Z')).toBe(true);
-    expect(dtre.covers('2014-12-31T23:59:59Z')).toBe(false);
+    const dtrexp = parse('20150101-*');
+    expect(dtrexp.covers('2015-01-01T00:00:00Z')).toBe(true);
+    expect(dtrexp.covers('2030-06-15T00:00:00Z')).toBe(true);
+    expect(dtrexp.covers('2014-12-31T23:59:59Z')).toBe(false);
   });
 });
 

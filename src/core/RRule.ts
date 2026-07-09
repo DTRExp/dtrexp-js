@@ -1,4 +1,4 @@
-import type { IDateLiteral, IDtreIR, IExpressionIR, ISelector } from '../types/index.js';
+import type { IDateLiteral, IDTRExpIR, IExpressionIR, ISelector } from '../types/index.js';
 import { renderLiteral } from './Canonical.js';
 
 const BYDAY = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
@@ -9,7 +9,7 @@ const FREQ: Record<string, string> = { Y: 'YEARLY', M: 'MONTHLY', W: 'WEEKLY', D
  *  Conservative: unions, time-of-day components, exclusions and open positive
  *  ranges are not mapped. Constrained cadences emit RFC 7529 `SKIP=BACKWARD`.
  */
-export function toRRuleString(ir: IDtreIR): string | null {
+export function toRRuleString(ir: IDTRExpIR): string | null {
   if (ir.expressions.length !== 1) return null;
   const expr = ir.expressions[0] as IExpressionIR;
   if (expr.time) return null;

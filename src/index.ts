@@ -1,10 +1,10 @@
 /**
- *  dtre-js — reference implementation of the DTRE specification.
- *  @see https://github.com/DTRExp/dtre-spec
+ *  dtrexp-js — reference implementation of the DTRExp specification.
+ *  @see https://github.com/DTRExp/dtrexp
  */
 
-export { DTRE, parse, validate } from './DTRE.js';
-export { DTRESyntaxError } from './DTRESyntaxError.js';
+export { DTRExp, parse, validate } from './DTRExp.js';
+export { DTRExpSyntaxError } from './DTRExpSyntaxError.js';
 export type {
   DateInput,
   IEpochHolder,
@@ -14,5 +14,5 @@ export type {
   IValidationResult
 } from './types/index.js';
 
-/** The DTRE specification draft this package implements. */
+/** The DTRExp specification draft this package implements. */
 export const SPEC_DRAFT = 2;

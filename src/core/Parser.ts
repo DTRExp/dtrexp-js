@@ -1,10 +1,10 @@
-import { DTRESyntaxError } from '../DTRESyntaxError.js';
+import { DTRExpSyntaxError } from '../DTRExpSyntaxError.js';
 import type {
   CadenceUnit,
   IBounds,
   ICadence,
   IDateLiteral,
-  IDtreIR,
+  IDTRExpIR,
   IExpressionIR,
   IIssue,
   ISelector,
@@ -27,11 +27,11 @@ const MIN_DAYS: Record<CadenceUnit, number> = { Y: 365, M: 28, W: 7, D: 1, H: 1 
 const MONTH_MAX_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 export interface IParseResult {
-  ir: IDtreIR;
+  ir: IDTRExpIR;
   warnings: IIssue[];
 }
 
-/** Parses a DTRE source string into its compiled IR. Throws `DTRESyntaxError`. */
+/** Parses a DTRExp source string into its compiled IR. Throws `DTRExpSyntaxError`. */
 export function parseToIR(source: string): IParseResult {
   return new Parser(source).parse();
 }
@@ -507,7 +507,7 @@ class Parser {
   }
 
   private fail(code: string, message: string, position: number): never {
-    throw new DTRESyntaxError(code, message, this.src, position);
+    throw new DTRExpSyntaxError(code, message, this.src, position);
   }
 }
 

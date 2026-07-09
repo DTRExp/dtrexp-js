@@ -82,11 +82,11 @@ describe('toString() — remaining canonical branches', () => {
 
 describe('covers() — sub-day cadence and ordinal scopes', () => {
   it('covers an hour-period cadence', () => {
-    const dtre = parse('20200106T0000/6H/1H');
-    expect(dtre.covers('2020-01-06T00:30:00Z')).toBe(true);
-    expect(dtre.covers('2020-01-06T06:30:00Z')).toBe(true);
-    expect(dtre.covers('2020-01-06T01:30:00Z')).toBe(false);
-    expect(dtre.covers('2020-01-05T23:30:00Z')).toBe(false);
+    const dtrexp = parse('20200106T0000/6H/1H');
+    expect(dtrexp.covers('2020-01-06T00:30:00Z')).toBe(true);
+    expect(dtrexp.covers('2020-01-06T06:30:00Z')).toBe(true);
+    expect(dtrexp.covers('2020-01-06T01:30:00Z')).toBe(false);
+    expect(dtrexp.covers('2020-01-05T23:30:00Z')).toBe(false);
   });
 
   it('resolves weekday ordinals in quarter and year scope', () => {

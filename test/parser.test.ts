@@ -1,17 +1,17 @@
 import { parseToIR } from '../src/core/Parser.js';
-import { DTRESyntaxError } from '../src/DTRESyntaxError.js';
+import { DTRExpSyntaxError } from '../src/DTRExpSyntaxError.js';
 import vectors from './vectors.json' with { type: 'json' };
 
-/** Asserts a thrown error is a DTRESyntaxError with a real (non-empty) message. */
-export function expectSyntaxError(fn: () => unknown): DTRESyntaxError {
+/** Asserts a thrown error is a DTRExpSyntaxError with a real (non-empty) message. */
+export function expectSyntaxError(fn: () => unknown): DTRExpSyntaxError {
   let err: unknown;
   try {
     fn();
   } catch (e) {
     err = e;
   }
-  expect(err).toBeInstanceOf(DTRESyntaxError);
-  const e = err as DTRESyntaxError;
+  expect(err).toBeInstanceOf(DTRExpSyntaxError);
+  const e = err as DTRExpSyntaxError;
   // the message begins with the specific reason, then the ` (at position …)` suffix;
   // an emptied message string would begin with that suffix instead
   expect(e.message.trimStart()).not.toMatch(/^\(at position/);
@@ -140,7 +140,7 @@ describe('parser: IR shapes', () => {
       parseToIR('M3 X5');
       expect.unreachable();
     } catch (err) {
-      const e = err as DTRESyntaxError;
+      const e = err as DTRExpSyntaxError;
       expect(e.code).toBe('unexpected-char');
       expect(e.position).toBe(3);
       expect(e.expression).toBe('M3 X5');

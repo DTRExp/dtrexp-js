@@ -2,7 +2,7 @@ import type {
   IBounds,
   ICadence,
   IDateLiteral,
-  IDtreIR,
+  IDTRExpIR,
   IExpressionIR,
   IFields,
   ISelector,
@@ -25,7 +25,7 @@ import { literalPseudo } from './Parser.js';
 const MS_PER_DAY = 86_400_000;
 
 /** Spec §9: one field extraction, then integer tests per component; `|` = any branch. */
-export function coversInstant(ir: IDtreIR, epochMs: number, tz: string): boolean {
+export function coversInstant(ir: IDTRExpIR, epochMs: number, tz: string): boolean {
   const fields = fieldsFromInstant(epochMs, tz);
   return ir.expressions.some((expr) => coversExpression(expr, fields, epochMs, tz));
 }

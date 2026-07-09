@@ -77,10 +77,10 @@ describe('parser: template error messages keep their text', () => {
   }
 });
 
-describe('DTRESyntaxError shape', () => {
+describe('DTRExpSyntaxError shape', () => {
   it('carries a name, code, position and a message quoting the expression', () => {
     const err = expectSyntaxError(() => parse('M3 X5'));
-    expect(err.name).toBe('DTRESyntaxError');
+    expect(err.name).toBe('DTRExpSyntaxError');
     expect(err.message).toContain("'M3 X5'");
     expect(err.message).toContain(String(err.position));
     expect(err.message).toContain('Unexpected');

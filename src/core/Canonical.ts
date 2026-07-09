@@ -2,7 +2,7 @@ import type {
   IBounds,
   ICadence,
   IDateLiteral,
-  IDtreIR,
+  IDTRExpIR,
   IExpressionIR,
   ISelector,
   ISpan,
@@ -39,7 +39,7 @@ const ORDER: Record<string, number> = {
 };
 
 /** Renders the compiled IR back to its canonical string form. */
-export function toCanonicalString(ir: IDtreIR): string {
+export function toCanonicalString(ir: IDTRExpIR): string {
   return ir.expressions.map(renderExpression).join(' | ');
 }
 

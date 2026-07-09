@@ -2,7 +2,7 @@ import type {
   IBounds,
   ICadence,
   IDateLiteral,
-  IDtreIR,
+  IDTRExpIR,
   IExpressionIR,
   ISelector,
   ITimeSelector,
@@ -50,7 +50,7 @@ const ORDER: Record<string, number> = {
 };
 
 /** Human-readable English rendering of the compiled IR (v1: `en` only). */
-export function describeIR(ir: IDtreIR): string {
+export function describeIR(ir: IDTRExpIR): string {
   return ir.expressions.map(describeExpression).join(', or ');
 }
 

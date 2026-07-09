@@ -1,7 +1,7 @@
 {
-  "name": "dtre-js",
+  "name": "dtrexp",
   "version": "1.0.0",
-  "description": "Reference TypeScript implementation of DTRE — compact date-time range & recursion expressions, evaluated by coverage.",
+  "description": "Reference TypeScript implementation of DTRExp — compact date-time range & recursion expressions, evaluated by coverage.",
   "type": "module",
   "main": "./lib/index.js",
   "module": "./lib/index.js",
@@ -32,13 +32,13 @@
     "mutation": "stryker run",
     "prepublishOnly": "npm run build"
   },
-  "repository": "DTRExp/dtre-js",
-  "homepage": "https://github.com/DTRExp/dtre-js#readme",
+  "repository": "DTRExp/dtrexp-js",
+  "homepage": "https://github.com/DTRExp/dtrexp-js#readme",
   "bugs": {
-    "url": "https://github.com/DTRExp/dtre-js/issues"
+    "url": "https://github.com/DTRExp/dtrexp-js/issues"
   },
   "keywords": [
-    "dtre",
+    "dtrexp",
     "date",
     "time",
     "datetime",
