@@ -169,3 +169,45 @@ describe('next()/intersect() — remaining branches', () => {
     expect(iso2(intervals[0]?.end)).toBe('2026-07-07T10:01:00.000Z');
   });
 });
+
+describe('next() — skip semantics, scoping, and union horizons', () => {
+  const nx = (e: string, a: string) => {
+    const r = parse(e).next(a);
+    return r ? `${r.start.toISOString()}..${r.end.toISOString()}` : null;
+  };
+
+  it('uses the full present-set for D scoping', () => {
+    // D40 needs Q2 in its plan's present set — day-of-quarter 40 is 2024-05-10
+    expect(nx('D40 Q2', '2024-01-01T00:00:00Z')).toBe(
+      '2024-05-10T00:00:00.000Z..2024-05-11T00:00:00.000Z'
+    );
+  });
+
+  it('never returns a window that lies wholly before `after`', () => {
+    // 09:00–12:00 ends before 15:00 and must not poison the skip cursor
+    expect(nx('T0900:1200,1400:1800', '2026-07-09T15:00:00Z')).toBe(
+      '2026-07-10T09:00:00.000Z..2026-07-10T12:00:00.000Z'
+    );
+  });
+
+  it('skips the whole multi-day chain containing `after`', () => {
+    // after sits mid-March: the rest of March is the same maximal interval
+    expect(nx('M3', '2024-03-15T12:00:00Z')).toBe(
+      '2025-03-01T00:00:00.000Z..2025-04-01T00:00:00.000Z'
+    );
+  });
+
+  it('ignores bounded-branch horizons while any union branch is unbounded', () => {
+    // branch one ends 2026; branch two is unbounded and must keep scanning
+    expect(nx('M3 *:20261231 | M5', '2026-06-01T00:00:00Z')).toBe(
+      '2027-05-01T00:00:00.000Z..2027-06-01T00:00:00.000Z'
+    );
+  });
+
+  it('scans to the latest bound across bounded union branches', () => {
+    // the 2024 branch is spent; the 2026 branch still has May 2025
+    expect(nx('M3 *:20240401 | M5 *:20260101', '2024-06-01T00:00:00Z')).toBe(
+      '2025-05-01T00:00:00.000Z..2025-06-01T00:00:00.000Z'
+    );
+  });
+});

@@ -163,3 +163,36 @@ describe('expandDaySpans (RRULE)', () => {
     expect(expandDaySpans(sel({ unit: 'D', spans: [{ start: 5, end: null }] }))).toBeNull(); // open positive
   });
 });
+
+describe('range algebra — boundary exactness (mutation hardening)', () => {
+  it('clipRanges drops a range clipped to zero width', () => {
+    expect(clipRanges([rng(0, 5)], 5, 10)).toEqual([]);
+    expect(clipRanges([rng(5, 10)], 0, 5)).toEqual([]);
+  });
+
+  it('filterCyclic aligns its scan to unit boundaries below r.lo', () => {
+    // minute 1 covered only; range starts mid-minute — the slice must start at r.lo,
+    // never at a misaligned pseudo-position
+    const covered = new Array<boolean>(60).fill(false);
+    covered[1] = true;
+    expect(filterCyclic([rng(1500, 2500)], covered, 1000, 60_000)).toEqual([rng(1500, 2000)]);
+  });
+
+  it('coveredValues resolves negatives against count - 1', () => {
+    const covered = coveredValues(sel({ spans: [{ start: -1, end: -1 }] }), 60);
+    expect(covered[59]).toBe(true);
+    expect(covered[58]).toBe(false);
+  });
+
+  it('unitRanges resolves negatives against count - 1', () => {
+    expect(unitRanges(sel({ spans: [{ start: -1, end: -1 }] }), 24, 3_600_000)).toEqual([
+      rng(23 * 3_600_000, 24 * 3_600_000)
+    ]);
+  });
+
+  it('unitRanges covers the whole domain for a full-domain selector', () => {
+    expect(unitRanges(sel({ spans: [{ start: null, end: null }] }), 24, 3_600_000)).toEqual([
+      rng(0, 86_400_000)
+    ]);
+  });
+});
