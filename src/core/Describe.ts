@@ -105,6 +105,8 @@ function describeSelector(selector: ISelector, present: ReadonlySet<Unit>): stri
   if (
     only &&
     only.start !== only.end &&
+    // Stryker disable next-line ConditionalExpression: equivalent — the null guard is for the type
+    // checker; `null < 0` is false, so the negated conjunction decides identically without it.
     !(only.start !== null && only.start < 0 && only.end === null)
   ) {
     return rangePhrase(selector.unit, only, scope);
@@ -125,36 +127,29 @@ function describeSelector(selector: ISelector, present: ReadonlySet<Unit>): stri
   }
 }
 
-/** The unit whose instance bounds a designator's domain — names the edge of an open range. */
+/**
+ *  Names the edge of an open range for the units whose domain edge moves per instance.
+ *  Only `D` and `W` ever ask (every other unit has a fixed, concretely-nameable maximum
+ *  in DOMAIN_MAX): `W` is always year-scoped; `D` follows the nearest of M/Q/Y present.
+ */
 function scopeNoun(unit: Unit, present: ReadonlySet<Unit>): string {
-  switch (unit) {
-    case 'D':
-      return present.has('M')
-        ? 'month'
-        : present.has('Q')
-          ? 'quarter'
-          : present.has('Y')
-            ? 'year'
-            : 'month';
-    case 'W':
-    case 'M':
-    case 'Q':
-      return 'year';
-    case 'E':
-      return 'week';
-    case 'H':
-      return 'day';
-    case 'm':
-      return 'hour';
-    default:
-      return 'minute';
-  }
+  if (unit === 'W') return 'year';
+  return present.has('M')
+    ? 'month'
+    : present.has('Q')
+      ? 'quarter'
+      : present.has('Y')
+        ? 'year'
+        : 'month';
 }
 
 /** A single-range selector as a standalone "from X to Y" phrase. */
 function rangePhrase(unit: Unit, span: ISpan, scope: string): string {
   if (unit === 'Y') {
+    // Stryker disable next-line ConditionalExpression: equivalent — a {null, null} span has start === end
+    // and never reaches rangePhrase, so the null guards here only narrow types.
     if (span.start !== null && span.end === null) return `from ${span.start} onwards`;
+    // Stryker disable next-line ConditionalExpression: equivalent — same unreachable {null, null} case.
     if (span.start === null && span.end !== null) return `up to ${span.end}`;
     return `from ${span.start} to ${span.end}`;
   }
@@ -200,6 +195,8 @@ function endpointName(unit: Unit, value: number): string {
 
 function isFullNegative(selector: ISelector): boolean {
   const span = selector.spans[0];
+  // Stryker disable next-line ConditionalExpression: equivalent — this runs only on the plain-selector
+  // path, where the parser guarantees at least one span; the undefined guard narrows types.
   return selector.spans.length === 1 && span !== undefined && (span.start ?? 0) < 0;
 }
 
@@ -210,6 +207,8 @@ function spanName(
 ): string {
   if (span.start === null && span.end === null) return `every ${UNIT_NOUNS[unit]}`;
   // `D-7:*` reads as "the last 7 days"
+  // Stryker disable next-line ConditionalExpression: equivalent — `null < 0` is false, so dropping
+  // the null guard selects the same branch; it exists for the type checker.
   if (span.start !== null && span.start < 0 && span.end === null) {
     const plural = `${UNIT_NOUNS[unit]}s`;
     return span.start === -1 ? `the last ${UNIT_NOUNS[unit]}` : `the last ${-span.start} ${plural}`;

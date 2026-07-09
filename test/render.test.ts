@@ -120,3 +120,30 @@ describe('toRRule()', () => {
     });
   }
 });
+
+describe('describe() — scope nouns, list edges, and time formatting', () => {
+  const cases: Array<[string, string]> = [
+    // D's edge noun follows the nearest of M/Q/Y — M wins over Q, Y stands alone
+    ['D25:* M4 Q2', 'from day 25 to end of month, in April, in Q2'],
+    ['D25:* Y2020', 'from day 25 to end of year in 2020'],
+    // open endpoints inside lists resolve to concrete edge names
+    ['M3,*:2', 'in March and January to February'],
+    ['M1,10:*', 'in January and October to December'],
+    ['Y2018,2021:2023', 'in 2018 and 2021 to 2023'],
+    ['H0:*,5', 'at hour 0 to 23 and 5'],
+    // hour 0 is a value, not "the last 0 hours"
+    ['D-1,5', 'on day 1st-to-last and 5'],
+    ['E-1', 'on 1st-to-last'],
+    // time lists join with "and"; sub-minute clocks pad their seconds
+    ['T0900:1200,1300:1800', '09:00–12:00 and 13:00–18:00'],
+    ['T090005:120000', '09:00:05–12:00'],
+    // unit nouns survive in stride and exclusion phrasings
+    ['Q1:4/2', 'every 2nd quarter from Q1 to Q4'],
+    ['E!6:7', 'every weekday except Saturday to Sunday']
+  ];
+  for (const [input, expected] of cases) {
+    it(`'${input}' → '${expected}'`, () => {
+      expect(parse(input).describe()).toBe(expected);
+    });
+  }
+});
