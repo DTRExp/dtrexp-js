@@ -19,6 +19,7 @@ Reference TypeScript implementation of **[DTRExp](https://github.com/DTRExp/dtre
 T0900:1800 E1:5          Mon–Fri, 09:00–18:00
 E7#-1 M4                 last Sunday of April, every year
 20200106/10D             every 10 days from 2020-01-06 (cron can't say this)
+D13 E5                   every Friday the 13th (cron can't say this either)
 D-7:* Y*                 last 7 days of every year
 M!7                      every month except July
 ```
