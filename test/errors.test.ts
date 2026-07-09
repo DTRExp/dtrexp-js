@@ -1,4 +1,4 @@
-import { parse } from '../src/index.js';
+import { parse, validate } from '../src/index.js';
 import { expectSyntaxError } from './helpers.js';
 
 /** Each entry: expression → expected error code. Covers the paths not in vectors.json. */
@@ -145,5 +145,117 @@ describe('parser: valid edge forms that must parse', () => {
     expect(() => parse('20200101/2H/119m')).not.toThrow();
     expect(parse('20200101T0000/2H/119m').covers('2020-01-01T01:58:00Z')).toBe(true);
     expect(parse('20200101T0000/2H/119m').covers('2020-01-01T01:59:30Z')).toBe(false);
+  });
+});
+
+describe('parser: exact domain boundaries per unit', () => {
+  const bad: Array<[string]> = [
+    ['Q5'],
+    ['Q-5'],
+    ['W54'],
+    ['W-54'],
+    ['H24'],
+    ['H-25'],
+    ['m60'],
+    ['m-61'],
+    ['s60'],
+    ['D32'],
+    ['D-32'],
+    ['D93 Q2'],
+    ['D367 Y2020'],
+    ['E0']
+  ];
+  for (const [e] of bad) {
+    it(`rejects '${e}' as out-of-domain`, () => {
+      expect(validate(e).errors[0]?.code).toBe('out-of-domain');
+    });
+  }
+
+  const good = [
+    'Q-4',
+    'W-53',
+    'H-24',
+    'm-60',
+    'D-31',
+    'D92 Q2',
+    'D366 Y2020',
+    'M1:12/12',
+    'M1/12',
+    'Y2000:*/10000',
+    '20200101/10D/36H'
+  ];
+  for (const e of good) {
+    it(`accepts '${e}' at its boundary`, () => {
+      expect(validate(e).valid).toBe(true);
+    });
+  }
+
+  it('reports exact error positions for misplaced ordinals', () => {
+    expect(validate('D5#2').errors[0]).toMatchObject({ code: 'ordinal-not-weekday', position: 2 });
+    expect(validate('E*#2').errors[0]).toMatchObject({ code: 'bad-ordinal', position: 2 });
+  });
+});
+
+describe('parser: time-value edges', () => {
+  it('rejects an empty time range', () => {
+    expect(validate('T1200:1200').errors[0]?.code).toBe('empty-time-range');
+  });
+
+  it("accepts '2400' only as a pure midnight end", () => {
+    expect(validate('T0000:2401').errors[0]?.code).toBe('bad-time-value');
+    expect(validate('T0000:240030').errors[0]?.code).toBe('bad-time-value');
+  });
+
+  it('allows fractional seconds only after six digits', () => {
+    expect(validate('T1230.250').errors[0]?.code).toBe('unexpected-char');
+    expect(validate('T12.5').errors[0]?.code).toBe('unexpected-char');
+  });
+
+  it('gives 2- and 4-digit values their implied unit interval', () => {
+    expect(parse('T12').covers('2024-03-05T12:30:00Z')).toBe(true);
+    expect(parse('T12').covers('2024-03-05T13:00:00Z')).toBe(false);
+    expect(parse('T12').toString()).toBe('T1200:1300');
+    expect(parse('T1230').covers('2024-03-05T12:30:30Z')).toBe(true);
+    expect(parse('T1230').covers('2024-03-05T12:31:00Z')).toBe(false);
+  });
+});
+
+describe('parser: exact codes, messages and positions (mutation hardening)', () => {
+  const codes: Array<[string, string]> = [
+    ['M3!5', 'misplaced-exclusion'],
+    ['T0960:1000', 'bad-time-value'],
+    ['20240101T1260', 'bad-date-literal'],
+    ['T0000:240000.500', 'bad-time-value'],
+    ['202401011', 'bad-date-literal'],
+    ['20240101T1230:20240101T1215', 'backwards-bounds'],
+    ['20240102T0000:20240101T2300', 'backwards-bounds'],
+    ['M1/3/0', 'stride-duration'],
+    ['20200101/3D/0D', 'cadence-duration'],
+    ['20200101/3D/3D', 'cadence-duration'],
+    ['20200106T0000/90m/2H', 'cadence-duration'],
+    ['D40 M1 Q1', 'out-of-domain']
+  ];
+  for (const [e, code] of codes) {
+    it(`'${e}' → ${code}`, () => {
+      expect(validate(e).errors[0]?.code).toBe(code);
+    });
+  }
+
+  it('keeps the specific messages of shape-vs-value failures', () => {
+    expect(validate('202401').errors[0]?.message).toMatch(/YYYYMMDD/);
+    expect(validate('Y0').errors[0]?.message).toMatch(/out of domain/);
+  });
+
+  it('accepts the boundary forms the checks must not swallow', () => {
+    expect(validate('M3:3/2').valid).toBe(true); // a degenerate range is not a wrap
+    expect(validate('M1/3/1').valid).toBe(true); // duration 1 is legal
+    expect(validate('M3\tY2018').valid).toBe(true); // tab is whitespace
+  });
+});
+
+describe('bounds: minute-precision span ends', () => {
+  it('runs through the end of the bound minute, and no further', () => {
+    expect(parse('*:20240101T1230').covers('2024-01-01T12:30:59Z')).toBe(true);
+    expect(parse('*:20240101T1230').covers('2024-01-01T12:31:00Z')).toBe(false);
   });
 });

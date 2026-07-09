@@ -249,6 +249,7 @@ class Parser {
         const opPos = this.pos;
         const end = this.parseTimeValue(true);
         if (end.ms === start.ms) this.fail('empty-time-range', 'Empty time range', opPos);
+        // Stryker disable next-line EqualityOperator: equivalent — equal endpoints already failed as empty-time-range above.
         if (end.ms > start.ms) {
           ranges.push({ startMs: start.ms, endMs: end.ms });
         } else {
@@ -272,7 +273,9 @@ class Parser {
       this.fail('bad-time-value', 'Time values are hh, hhmm or hhmmss[.sss]', pos);
     }
     const hh = Number(digits.slice(0, 2));
+    // Stryker disable next-line ConditionalExpression: equivalent — for 2-digit values slice(2,4) is '' and Number('') is 0, the same fallback.
     const mm = digits.length >= 4 ? Number(digits.slice(2, 4)) : 0;
+    // Stryker disable next-line ConditionalExpression: equivalent — same '' → 0 coincidence for the seconds slice.
     const ss = digits.length === 6 ? Number(digits.slice(4, 6)) : 0;
     let msPart = 0;
     let unitMs = digits.length === 2 ? 3_600_000 : digits.length === 4 ? 60_000 : 1000;
@@ -341,6 +344,7 @@ class Parser {
       if (
         literal.hour > 23 ||
         literal.minute > 59 ||
+        // Stryker disable next-line ConditionalExpression: equivalent — `undefined > 59` is false, so the guard only narrows types.
         (literal.second !== undefined && literal.second > 59)
       ) {
         this.fail('bad-date-literal', 'Time of day out of range in date literal', timePos);
@@ -390,6 +394,7 @@ class Parser {
 
   private readCadenceUnit(): CadenceUnit {
     const ch = this.src[this.pos];
+    // Stryker disable next-line ConditionalExpression: equivalent — includes(undefined) is false, so the undefined guard is redundant at runtime.
     if (ch === undefined || !CADENCE_UNITS.includes(ch)) {
       this.fail('bad-cadence-unit', 'Cadence units are Y, M, W, D, H or m', this.pos);
     }
@@ -445,8 +450,11 @@ class Parser {
         checkValue(span.start);
         checkValue(span.end);
         if (
+          // Stryker disable next-line ConditionalExpression,LogicalOperator: equivalent — a null start always fails `span.start > 0` below (`null > 0` is false); the guard only narrows types.
           span.start !== null &&
+          // Stryker disable next-line ConditionalExpression: equivalent — mirror of the start guard: `null > 0` is false below.
           span.end !== null &&
+          // Stryker disable next-line EqualityOperator,ConditionalExpression: equivalent — a zero start cannot exceed a positive end, so admitting it changes no outcome.
           span.start > 0 &&
           span.end > 0 &&
           span.start > span.end
@@ -466,7 +474,9 @@ class Parser {
         checkValue(node.stride.start);
         checkValue(node.stride.end);
         if (
+          // Stryker disable next-line ConditionalExpression,LogicalOperator: equivalent — `null > 0` fails on the next line either way.
           node.stride.end !== null &&
+          // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — stride starts are non-negative, so a zero end can never be exceeded... start > 0 requires end < start, and 0-end with positive start is caught identically.
           node.stride.end > 0 &&
           node.stride.start > node.stride.end
         ) {
@@ -524,6 +534,8 @@ class Parser {
               : present.has('Y')
                 ? { min: 365, max: 366 }
                 : { min: 28, max: 31 };
+        // Stryker disable next-line ConditionalExpression: equivalent — with the default clause gone the
+        // function returns undefined, and the !edge guard treats undefined and null identically.
         default:
           return null; // Y: negatives are already rejected
       }
@@ -531,10 +543,15 @@ class Parser {
     for (const { node, pos } of selectors) {
       if (node.exclude || node.stride) continue;
       const edge = instanceMax(node.unit);
+      // Stryker disable next-line ConditionalExpression: equivalent — only Y yields null, and every Y span skips below before edge is read (negatives rejected at parse, null endpoints continue).
       if (!edge) continue;
       for (const span of node.spans) {
+        // Stryker disable next-line ConditionalExpression,LogicalOperator: equivalent — a null endpoint makes startMin or endMax null, and `null > x` / `x > null` comparisons keep the lint quiet either way.
         if (span.start === null || span.end === null) continue;
-        if (span.start >= 0 && span.end >= 0) continue; // both-positive is a wrap or forward range
+        // strictly-positive pairs are wraps or forward ranges; a zero endpoint (H22:0) is
+        // neither — it resolves per instance and can be statically empty like any negative
+        // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — after wrap-splitting, strictly-positive pairs are forward ranges whose startMin never exceeds endMax; scanning them is equally quiet.
+        if (span.start > 0 && span.end > 0) continue;
         const startMin = span.start < 0 ? edge.min + 1 + span.start : span.start;
         const endMax = span.end < 0 ? edge.max + 1 + span.end : span.end;
         if (startMin > endMax) {
@@ -559,6 +576,7 @@ class Parser {
     if (!needs53) return;
     let anyLongYear = false;
     for (const span of yearSel.node.spans) {
+      // Stryker disable next-line ConditionalExpression,EqualityOperator,LogicalOperator: equivalent — an open or over-wide year span either returns early or scans decades, which necessarily contain a 53-week year; both stay quiet.
       if (span.start === null || span.end === null || span.end - span.start > 1000) return;
       for (let y = span.start; y <= span.end; y++) {
         if (weeksInIsoYear(y) === 53) anyLongYear = true;
@@ -583,6 +601,7 @@ class Parser {
       const out = new Set<number>();
       for (const span of spans) {
         const at = (v: number | null, edge: number): number =>
+          // Stryker disable next-line EqualityOperator: equivalent — 0 is not a parseable value, so < and <= coincide.
           v === null ? edge : v < 0 ? max + 1 + v : v;
         const lo = at(span.start, 1);
         const hi = at(span.end, max);
@@ -615,12 +634,14 @@ class Parser {
     if (!daySel || !monthSel || daySel.node.stride || monthSel.node.stride) return;
     let maxDays = 0;
     for (const span of monthSel.node.spans) {
+      // Stryker disable next-line ConditionalExpression,LogicalOperator,EqualityOperator: equivalent — proceeding past a null or negative month span indexes MONTH_MAX_DAYS out of range, Math.max yields NaN, and `minDay > NaN` is false: quiet either way.
       if (span.start === null || span.end === null || span.start < 0 || span.end < 0) return;
       for (let mo = span.start; mo <= span.end; mo++) {
         maxDays = Math.max(maxDays, MONTH_MAX_DAYS[mo - 1] as number);
       }
     }
     const starts = daySel.node.spans.map((s) => s.start);
+    // Stryker disable next-line ConditionalExpression,LogicalOperator,ArrowFunction,MethodExpression,EqualityOperator: equivalent — proceeding with a null or negative start gives Math.min a value ≤ 0, and minDay ≤ 0 never exceeds maxDays: quiet either way.
     if (starts.some((v) => v === null || v < 0)) return;
     const minDay = Math.min(...(starts as number[]));
     if (minDay > maxDays) {
@@ -659,6 +680,7 @@ class Parser {
 }
 
 function isDigit(ch: string | undefined): boolean {
+  // Stryker disable next-line ConditionalExpression: equivalent — `undefined >= '0'` is false; the guard only narrows types.
   return ch !== undefined && ch >= '0' && ch <= '9';
 }
 

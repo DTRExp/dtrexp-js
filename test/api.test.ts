@@ -28,6 +28,13 @@ describe('validate()', () => {
     expect(validate('W53,1 Y2021').warnings).toEqual([]); // W1 always exists
   });
 
+  it('warns on a zero-endpoint range that is empty in every instance', () => {
+    // H22:0 neither wraps (0 is not positive) nor ever satisfies 22 <= h <= 0
+    expect(validate('H22:0').warnings[0]?.code).toBe('unsatisfiable');
+    expect(validate('H0:5').warnings).toEqual([]);
+    expect(validate('H22:6').warnings).toEqual([]); // a true wrap stays quiet
+  });
+
   it('stays quiet when months and quarters do intersect', () => {
     expect(validate('M3 Q1').warnings).toEqual([]);
     expect(validate('M-1 Q4').warnings).toEqual([]);
@@ -114,5 +121,66 @@ describe('describe() — locale guard', () => {
 
   it('throws on an unsupported locale with a specific message', () => {
     expect(() => parse('M3').describe('fr')).toThrow(/Unsupported locale/);
+  });
+});
+
+describe('validate() — inverted-range warnings across every unit scope', () => {
+  const warns = [
+    'M12:-2',
+    'D-1:26 M1',
+    'D-1:80 Q2',
+    'Q-1:2',
+    'E-1:2',
+    'H-1:5',
+    'm-1:5',
+    's-1:55',
+    'W-1:10',
+    'W-1:40',
+    'D-1:26',
+    'D-1:300 Y2024',
+    'D-25:20 Q1',
+    'M-2:10',
+    'E5 W53 Y2021',
+    'E1 M-1 Q1',
+    'E1 D30 M2'
+  ];
+  for (const e of warns) {
+    it(`warns on '${e}'`, () => {
+      expect(validate(e).warnings[0]?.code).toBe('unsatisfiable');
+    });
+  }
+
+  const quiet = [
+    'H-24:5',
+    'E-7:1',
+    'Q-4:1',
+    'M!-2:2',
+    'H22:*',
+    'D-7:*',
+    'W1:53 Y2021',
+    'W53:* Y2021',
+    'W53 Y2021:2026',
+    'M-3 Q4',
+    'M4 Q2',
+    'M5 Q2',
+    'M6 Q2',
+    'D5 M3',
+    'D31 M4:5',
+    'D31 M1,2',
+    'D5,30 M2',
+    'D29 M2',
+    'D-25:20 M1 Q1'
+  ];
+  for (const e of quiet) {
+    it(`stays quiet on '${e}'`, () => {
+      expect(validate(e).warnings).toEqual([]);
+    });
+  }
+
+  it('carries a meaningful message on every lint', () => {
+    expect(validate('M-2:2').warnings[0]?.message).toMatch(/backwards/);
+    expect(validate('W53 Y2021').warnings[0]?.message).toMatch(/Week 53/);
+    expect(validate('M-1 Q1').warnings[0]?.message).toMatch(/quarter/);
+    expect(validate('D30 M2').warnings[0]?.message).toMatch(/Day 30/);
   });
 });
