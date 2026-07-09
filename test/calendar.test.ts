@@ -290,6 +290,37 @@ describe('calendar: mutation-hardening — wide-range and boundary behaviour', (
     );
   });
 
+  // Not every zone shifts by a whole hour, and not every transition happens at 02:00.
+  // These guard the disambiguation against assuming either.
+  it('handles a half-hour DST shift (Australia/Lord_Howe, +10:30 ↔ +11:00)', () => {
+    // 2024-10-06: 02:00 → 02:30, so 02:15 is inside a 30-minute gap → forward to 02:45
+    expect(epochFromLocal('Australia/Lord_Howe', 2024, 10, 6, 2, 15, 0)).toBe(
+      Date.UTC(2024, 9, 5, 15, 45)
+    );
+    // 01:30 exists exactly once, before the gap
+    expect(epochFromLocal('Australia/Lord_Howe', 2024, 10, 6, 1, 30, 0)).toBe(
+      Date.UTC(2024, 9, 5, 15, 0)
+    );
+    // 2024-04-07: 01:45 occurs twice, 30 minutes apart → the earlier
+    expect(epochFromLocal('Australia/Lord_Howe', 2024, 4, 7, 1, 45, 0)).toBe(
+      Date.UTC(2024, 3, 6, 14, 45)
+    );
+  });
+
+  it('handles a gap that swallows local midnight (America/Santiago)', () => {
+    // 2024-09-08: clocks jump 00:00 → 01:00, so that local date has no midnight
+    expect(epochFromLocal('America/Santiago', 2024, 9, 8, 0, 0, 0)).toBe(
+      Date.UTC(2024, 8, 8, 4, 0)
+    );
+    expect(epochFromLocal('America/Santiago', 2024, 9, 8, 0, 30, 0)).toBe(
+      Date.UTC(2024, 8, 8, 4, 30)
+    );
+  });
+
+  it('handles a half-hour zone with no DST at all (Asia/Kolkata, +05:30)', () => {
+    expect(epochFromLocal('Asia/Kolkata', 2024, 6, 1, 10, 15, 0)).toBe(Date.UTC(2024, 5, 1, 4, 45));
+  });
+
   it('resolves an ambiguous local time to its earlier occurrence, either side of UTC', () => {
     // 2024-11-03T01:30 happens twice in New York (05:30Z in EDT, 06:30Z in EST);
     // 2024-10-27T01:30 happens twice in London (00:30Z in BST, 01:30Z in GMT).
