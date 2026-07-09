@@ -129,15 +129,16 @@ describe('expandSpans (RRULE)', () => {
     ).toEqual([1, 2, 6, 7, 11, 12]);
   });
 
-  it('expands negative ranges to negative indices', () => {
-    expect(expandSpans(sel({ spans: [{ start: -3, end: -1 }] }), 12)).toEqual([-3, -2, -1]);
+  it('rejects negative ranges — no non-day BY* rule takes them', () => {
+    expect(expandSpans(sel({ spans: [{ start: -3, end: -1 }] }), 12)).toBeNull();
   });
 
   it('rejects unmappable spans', () => {
     expect(expandSpans(sel({ spans: [{ start: null, end: null }] }), 12)).toBeNull(); // *
     expect(expandSpans(sel({ spans: [{ start: 3, end: null }] }), 12)).toBeNull(); // open positive
     expect(expandSpans(sel({ spans: [{ start: -3, end: 5 }] }), 12)).toBeNull(); // mixed sign
-    expect(expandSpans(sel({ spans: [{ start: -1, end: -1 }] }), 53, false)).toBeNull(); // negatives disallowed
+    expect(expandSpans(sel({ spans: [{ start: -1, end: -1 }] }), 53)).toBeNull(); // negatives never map
+    expect(expandSpans(sel({ spans: [{ start: null, end: 5 }] }), 12)).toBeNull(); // open start
   });
 });
 

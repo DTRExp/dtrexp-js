@@ -42,7 +42,7 @@ describe('toRRule() — full branch coverage', () => {
     ['D5 Q2', null],
     ['D60 Y2024', 'DTSTART;VALUE=DATE:20240101\nRRULE:FREQ=YEARLY;BYYEARDAY=60;UNTIL=20241231'],
     ['D15', 'RRULE:FREQ=MONTHLY;BYMONTHDAY=15'],
-    ['W3 E5#2', 'RRULE:FREQ=MONTHLY;BYWEEKNO=3;BYDAY=2FR'],
+    ['W3 E5#2', null], // BYWEEKNO is YEARLY-only; ordinal BYDAY is MONTHLY/YEARLY-only
     ['E3 M3', 'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=WE'],
     ['M3 Y2018 20150101:*', null],
     ['M3 *:20180120T1800', null],
@@ -52,8 +52,8 @@ describe('toRRule() — full branch coverage', () => {
     ],
     ['M*', null],
     ['M3:*', null],
-    ['M-1', 'RRULE:FREQ=YEARLY;BYMONTH=-1'],
-    ['M-3:*', 'RRULE:FREQ=YEARLY;BYMONTH=-3,-2,-1'],
+    ['M-1', null], // BYMONTH takes no negative values (RFC 5545)
+    ['M-3:*', null],
     ['E7#2 Q1', null],
     ['M3:-1', null],
     ['M1/5/2', 'RRULE:FREQ=YEARLY;BYMONTH=1,2,6,7,11,12'],

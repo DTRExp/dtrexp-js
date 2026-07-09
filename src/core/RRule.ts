@@ -55,7 +55,7 @@ export function toRRuleString(ir: IDTRExpIR): string | null {
           break;
         }
         const span = selector.spans[0];
-        if (selector.spans.length !== 1 || !span || span.start === null || span.start < 0) {
+        if (selector.spans.length !== 1 || !span || span.start === null) {
           return null;
         }
         dtstart = { year: span.start, month: 1, day: 1 };
@@ -78,15 +78,15 @@ export function toRRuleString(ir: IDTRExpIR): string | null {
         break;
       }
       case 'W': {
-        const weeks = expandSpans(selector, 53, false);
+        const weeks = expandSpans(selector, 53);
         if (!weeks) return null;
         byWeekNo.push(...weeks);
         freq ??= 'YEARLY';
         break;
       }
       case 'D': {
-        const yearScope = !present.has('M') && !present.has('Q') && present.has('Y');
         if (present.has('Q')) return null;
+        const yearScope = !present.has('M') && present.has('Y');
         const days = expandDaySpans(selector);
         if (!days) return null;
         if (yearScope) byYearDay.push(...days);
@@ -96,11 +96,12 @@ export function toRRuleString(ir: IDTRExpIR): string | null {
       }
       case 'E': {
         if (selector.ordinal !== undefined) {
-          if (present.has('Q')) return null;
+          // BYWEEKNO is YEARLY-only and an ordinal BYDAY is MONTHLY/YEARLY-only (RFC 5545);
+          // W or a cadence would force an invalid combination
+          if (present.has('Q') || present.has('W') || expr.cadence) return null;
           const value = selector.spans[0]?.start as number;
           byDay.push(`${selector.ordinal}${BYDAY[value - 1]}`);
           freq ??= present.has('M') || present.has('Y') ? 'YEARLY' : 'MONTHLY';
-          if (freq === 'YEARLY' && !present.has('M') && !present.has('Y')) freq = 'MONTHLY';
           break;
         }
         const days = expandSpans(selector, 7);
@@ -122,6 +123,7 @@ export function toRRuleString(ir: IDTRExpIR): string | null {
       if (dtstart) return null; // phase conflict with a cadence anchor or Y selector
       dtstart = b.start;
     }
+    // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — with no b.end the assignment stores undefined into an already-falsy until, and at render-equality either literal renders the same UNTIL.
     if (b.end) until = until && renderLiteral(until) < renderLiteral(b.end) ? until : b.end;
   }
   if (!freq) return null;
@@ -142,12 +144,12 @@ export function toRRuleString(ir: IDTRExpIR): string | null {
   return dtstart ? `DTSTART;VALUE=DATE:${renderLiteral(dtstart)}\n${rule}` : rule;
 }
 
-/** Expands spans (and phase-locked strides) to a concrete value list, else null. */
-export function expandSpans(
-  selector: ISelector,
-  max: number,
-  allowNegative = true
-): number[] | null {
+/**
+ *  Expands spans (and phase-locked strides) to a concrete value list, else null.
+ *  Open and negative spans are unmapped: of RRULE's BY* rules only the day lists
+ *  take negative values, and days go through expandDaySpans instead.
+ */
+export function expandSpans(selector: ISelector, max: number): number[] | null {
   const out: number[] = [];
   if (selector.stride) {
     const s = selector.stride;
@@ -158,15 +160,10 @@ export function expandSpans(
     return out;
   }
   for (const span of selector.spans) {
-    if (span.start === null && span.end === null) return null; // `*` — redundant, unmapped
-    const start = span.start as number;
-    const end = span.end ?? (start < 0 ? -1 : null);
-    if (end === null) return null;
-    if (start < 0 && !allowNegative) return null;
-    if (start < 0 !== end < 0) return null;
-    const from = start < 0 ? max + 1 + start : start;
-    const to = end < 0 ? max + 1 + end : end;
-    for (let v = from; v <= to; v++) out.push(start < 0 ? v - max - 1 : v);
+    if (span.start === null || span.end === null) return null;
+    // Stryker disable next-line EqualityOperator: equivalent — 0 is not a parseable value for any unit routed here, so < and <= coincide.
+    if (span.start < 0 || span.end < 0) return null;
+    for (let v = span.start; v <= span.end; v++) out.push(v);
   }
   return out;
 }
@@ -177,11 +174,14 @@ export function expandDaySpans(selector: ISelector): number[] | null {
   const out: number[] = [];
   for (const span of selector.spans) {
     if (span.start === null) return null;
+    // Stryker disable next-line EqualityOperator: equivalent — 'D0' is rejected at parse, so < and <= coincide.
     if (span.start < 0) {
       const end = span.end ?? -1;
+      // Stryker disable next-line EqualityOperator: equivalent — end is -1 or a parsed nonzero day, never 0.
       if (end > 0) return null;
       for (let v = span.start; v <= end; v++) out.push(v);
     } else {
+      // Stryker disable next-line EqualityOperator: equivalent — 'D0' is rejected at parse, so < and <= coincide.
       if (span.end === null || span.end < 0) return null;
       for (let v = span.start; v <= span.end; v++) out.push(v);
     }

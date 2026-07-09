@@ -147,3 +147,47 @@ describe('describe() — scope nouns, list edges, and time formatting', () => {
     });
   }
 });
+
+describe('toRRule() — only valid RFC 5545 output, or null', () => {
+  const cases: Array<[string, string | null]> = [
+    // open and negative spans on non-day units have no valid BY* form
+    ['M*:5', null],
+    ['M-2', null],
+    ['E-1', null],
+    ['E-2:-1', null],
+    ['Q-1', null],
+    ['Y*:2020', null],
+    // BYWEEKNO is YEARLY-only; ordinal BYDAY is MONTHLY/YEARLY-only
+    ['E5#2 W10', null],
+    ['E5#2 20200106/10D', null],
+    // cadence durations beyond the day-instant form are unmappable
+    ['20200101/1Y/1M', null],
+    ['20200101/3M/2D', null],
+    ['20200101/3M/1W', null],
+    ['20200106/2W/1D', null],
+    ['E1 20200106T0000/6H/1H', null],
+    ['H9 E1', null],
+    ['D25:-1', null],
+    // valid mappings pin their exact output
+    [
+      'D5 M3 Y2018',
+      'DTSTART;VALUE=DATE:20180101\nRRULE:FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=5;UNTIL=20181231'
+    ],
+    ['E5#2 Y2018', 'DTSTART;VALUE=DATE:20180101\nRRULE:FREQ=YEARLY;BYDAY=2FR;UNTIL=20181231'],
+    ['E1 Q2', 'RRULE:FREQ=YEARLY;BYMONTH=4,5,6;BYDAY=MO'],
+    ['E1 Y2018', 'DTSTART;VALUE=DATE:20180101\nRRULE:FREQ=YEARLY;BYDAY=MO;UNTIL=20181231'],
+    ['D5,10 Y2018', 'DTSTART;VALUE=DATE:20180101\nRRULE:FREQ=YEARLY;BYYEARDAY=5,10;UNTIL=20181231'],
+    ['E2,4,6', 'RRULE:FREQ=WEEKLY;BYDAY=TU,TH,SA'],
+    ['M1:5/4/2', 'RRULE:FREQ=YEARLY;BYMONTH=1,2,5'],
+    // the tighter of two UNTILs wins
+    [
+      'Y2020:2040/3 *:20291231',
+      'DTSTART;VALUE=DATE:20200101\nRRULE:FREQ=YEARLY;INTERVAL=3;UNTIL=20291231'
+    ]
+  ];
+  for (const [input, expected] of cases) {
+    it(`'${input}' → ${expected === null ? 'null' : 'pinned'}`, () => {
+      expect(parse(input).toRRule()).toBe(expected);
+    });
+  }
+});
