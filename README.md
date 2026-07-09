@@ -90,7 +90,7 @@ parse('D25 M12').toRRule();
 
 ## Expression syntax (spec draft 2.1)
 
-The full grammar and semantics live in the **[specification](https://github.com/DTRExp/dtrexp/blob/main/draft-2.md)**; the essentials:
+The full grammar and semantics live in the **[specification](https://github.com/DTRExp/dtrexp/blob/main/spec.md)**; the essentials:
 
 | Component | Example | Meaning |
 | --- | --- | --- |
