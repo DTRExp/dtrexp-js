@@ -216,15 +216,16 @@ export function fieldsFromInstant(epochMs: number, tz: string): IFields {
 }
 
 /**
- *  Absolute instant of a local wall-clock time in the given zone, via the
- *  two-candidate offset technique. A DST-gap local time resolves forward (constrain).
+ *  Absolute instant of a local wall-clock time in the given zone, implementing
+ *  Temporal's `compatible` disambiguation, which §9.3 invokes:
  *
- *  KNOWN DEFECT: a repeated (fall-back) local time resolves inconsistently — to the
- *  later occurrence east of UTC (Europe/Berlin 02:30 → 01:30Z) and to the earlier one
- *  west of UTC (America/New_York 01:30 → 05:30Z). The result depends on the sign of
- *  the zone's offset, because `offsetAt(target)` probes a pseudo-epoch as if it were
- *  an instant. Temporal's `compatible` disambiguation (which §9.3 invokes) always
- *  picks the earlier occurrence. Fixing this changes observable behaviour east of UTC.
+ *  - exactly one instant carries the fields → that instant;
+ *  - **repeated** local time (fall-back overlap) → the **earlier** occurrence;
+ *  - **nonexistent** local time (spring-forward gap) → resolve **forward**, past the gap.
+ *
+ *  The two candidates come from the offsets in effect a day either side of the target
+ *  local time. Probing the target itself is wrong: it is a local pseudo-epoch, not an
+ *  instant, so which candidate it lands on flips with the sign of the zone's offset.
  */
 export function epochFromLocal(
   tz: string,
@@ -240,14 +241,15 @@ export function epochFromLocal(
   // Stryker disable next-line all: 'UTC' fast path is a pure optimization — the candidate search yields the same result
   if (tz === 'UTC') return target;
   const offsetAt = (t: number): number => fieldsFromInstant(t, tz).pseudo - t;
-  const c1 = target - offsetAt(target);
-  // Stryker disable next-line ConditionalExpression,ArithmeticOperator: equivalent — when this guard holds,
-  // offsetAt(c1) === offsetAt(target), so the fallthrough recomputes c2 === c1 and the next guard returns it.
-  // Skipping the early return therefore yields the identical instant; no input can observe the difference.
-  if (offsetAt(c1) + c1 === target) return c1;
-  const c2 = target - offsetAt(c1);
-  if (offsetAt(c2) + c2 === target) return c2;
-  return Math.max(c1, c2);
+  // A zone offset never exceeds ±24h, so these bracket every offset in effect at `target`.
+  const before = target - offsetAt(target - MS_PER_DAY);
+  const after = target - offsetAt(target + MS_PER_DAY);
+  const earlier = Math.min(before, after);
+  const later = Math.max(before, after);
+  if (offsetAt(earlier) + earlier === target) return earlier;
+  // Either `later` is the sole instant carrying these fields, or none does (a gap) and
+  // constraining forward lands on `later` too — so both cases return the same value.
+  return later;
 }
 
 /** Absolute instant of a local pseudo-epoch value (millisecond precision). */

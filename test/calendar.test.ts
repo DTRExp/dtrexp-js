@@ -155,18 +155,20 @@ describe('calendar: time-zone field extraction', () => {
     expect(epochFromLocal('Europe/Berlin', 2026, 1, 7, 9, 30, 0)).toBe(Date.UTC(2026, 0, 7, 8, 30));
   });
 
-  it('resolves DST-gap local times forward and repeated ones to the later pass', () => {
+  it('resolves DST-gap local times forward and repeated ones to the earlier pass', () => {
+    // 02:30 on spring-forward day does not exist → constrain forward to 03:30 CEST
     expect(epochFromLocal('Europe/Berlin', 2026, 3, 29, 2, 30, 0)).toBe(
       Date.UTC(2026, 2, 29, 1, 30)
     );
+    // 02:30 on fall-back day happens twice → the earlier (CEST, +02:00), per Temporal
+    // `compatible`. This zone is east of UTC; America/New_York exercises the west side.
     expect(epochFromLocal('Europe/Berlin', 2026, 10, 25, 2, 30, 0)).toBe(
-      Date.UTC(2026, 9, 25, 1, 30)
+      Date.UTC(2026, 9, 25, 0, 30)
     );
   });
 
-  it('corrects a pre-transition time via the second offset candidate', () => {
-    // 01:30 local on spring-forward day is valid (+1) but the target-offset
-    // guess lands past the gap — the second candidate recovers it
+  it('resolves a valid local time on the hour before a spring-forward gap', () => {
+    // 01:30 local is CET (+1) and exists exactly once, at 00:30Z
     expect(epochFromLocal('Europe/Berlin', 2026, 3, 29, 1, 30, 0)).toBe(
       Date.UTC(2026, 2, 29, 0, 30)
     );
@@ -288,12 +290,15 @@ describe('calendar: mutation-hardening — wide-range and boundary behaviour', (
     );
   });
 
-  it('resolves an ambiguous local time west of UTC to its earlier occurrence', () => {
-    // 2024-11-03T01:30 happens twice in New York (05:30Z in EDT, 06:30Z in EST).
-    // Temporal's `compatible` disambiguation picks the earlier — this zone matches it.
-    // (See the KNOWN DEFECT note on epochFromLocal: zones east of UTC pick the later.)
+  it('resolves an ambiguous local time to its earlier occurrence, either side of UTC', () => {
+    // 2024-11-03T01:30 happens twice in New York (05:30Z in EDT, 06:30Z in EST);
+    // 2024-10-27T01:30 happens twice in London (00:30Z in BST, 01:30Z in GMT).
+    // Disambiguation must not depend on the sign of the zone's offset.
     expect(epochFromLocal('America/New_York', 2024, 11, 3, 1, 30, 0)).toBe(
       Date.UTC(2024, 10, 3, 5, 30)
+    );
+    expect(epochFromLocal('Europe/London', 2024, 10, 27, 1, 30, 0)).toBe(
+      Date.UTC(2024, 9, 27, 0, 30)
     );
   });
 });
