@@ -1,3 +1,4 @@
+import { epochFromPseudo } from '../src/utils/calendar.js';
 import {
   addMonthsConstrain,
   civilFromDays,
@@ -204,5 +205,95 @@ describe('fieldsFromInstant — zoned seconds and milliseconds', () => {
     expect(f.second).toBe(45);
     expect(f.msOfDay % 1000).toBe(250);
     expect([f.hour, f.minute]).toEqual([9, 30]); // +2 summer offset
+  });
+});
+
+describe('calendar: mutation-hardening — wide-range and boundary behaviour', () => {
+  const MS_PER_DAY = 86_400_000;
+
+  // civilFromDays' century correction (+floor(doe/36_524)) only changes the computed
+  // year-of-era on the days where the running total crosses a 365 boundary — the 1 Mar
+  // after a century's worth of day-of-era. Round-tripping mid-year dates never sees it.
+  it('inverts epochDay across century and era boundaries', () => {
+    const dates: Array<[number, number, number]> = [
+      [1600, 3, 1], // first day of era 4
+      [1899, 12, 31],
+      [1900, 3, 1], // century correction engages
+      [1970, 3, 1], // century correction engages
+      [2000, 2, 29], // last day of era 4 (leap)
+      [2000, 3, 1], // first day of era 5
+      [2100, 6, 15],
+      [2399, 12, 31],
+      [2400, 2, 29] // last day of era 5
+    ];
+    for (const [year, month, day] of dates) {
+      expect(civilFromDays(epochDay(year, month, day))).toEqual({ year, month, day });
+    }
+  });
+
+  it('reports 52 ISO weeks in a short year and 53 in a long one', () => {
+    // ground truth: a year is long iff 1 Jan is Thursday, or Wednesday in a leap year
+    expect(weeksInIsoYear(2021)).toBe(52);
+    expect(weeksInIsoYear(2024)).toBe(52);
+    expect(weeksInIsoYear(2020)).toBe(53);
+    expect(weeksInIsoYear(2026)).toBe(53);
+  });
+
+  // monthsBetween compares pseudo-instants; the sub-second component decides the
+  // tie when the landing date and the target date are the same calendar day.
+  it('counts a partial month as zero when only sub-second time is short', () => {
+    const a = { year: 2024, month: 1, day: 31, msOfDay: 5 };
+    const b = { year: 2024, month: 2, day: 29, msOfDay: 3 };
+    expect(monthsBetween(a, b)).toBe(0); // lands on Feb 29 at ms=5, b is 2ms earlier
+  });
+
+  it('counts a whole month when the sub-second time reaches the landing', () => {
+    const a = { year: 2024, month: 1, day: 31, msOfDay: 3 };
+    const b = { year: 2024, month: 2, day: 29, msOfDay: 5 };
+    expect(monthsBetween(a, b)).toBe(1);
+  });
+
+  it('normalises sub-second ms for pre-epoch instants on the Intl path', () => {
+    // -1500ms is 1969-12-31T23:59:58.500Z, i.e. 01:59:58.500 in Istanbul (+02:00).
+    // msOfDay must be asserted exactly: a negative ms of -500 is congruent to +500
+    // modulo 1000, so `msOfDay % 1000` cannot distinguish a broken wrap from a sound one.
+    const pre = fieldsFromInstant(-1500, 'Europe/Istanbul');
+    expect([pre.hour, pre.minute, pre.second]).toEqual([1, 59, 58]);
+    expect(pre.msOfDay).toBe(1 * 3_600_000 + 59 * 60_000 + 58 * 1000 + 500);
+
+    const post = fieldsFromInstant(1_000_000_123, 'Europe/Istanbul');
+    expect(post.msOfDay % 1000).toBe(123);
+  });
+
+  it('preserves sub-second ms through epochFromPseudo', () => {
+    const pseudo = epochDay(2024, 3, 1) * MS_PER_DAY + 3_600_000 + 123;
+    expect(epochFromPseudo('UTC', pseudo)).toBe(
+      epochDay(2024, 3, 1) * MS_PER_DAY + 3_600_000 + 123
+    );
+  });
+
+  // The two-candidate search: a DST-gap local time has no valid instant, so the
+  // first candidate never validates and the second candidate decides the result.
+  it('resolves a DST-gap local time forward', () => {
+    // 2024-03-10T02:30 does not exist in New York; constrain resolves forward
+    expect(epochFromLocal('America/New_York', 2024, 3, 10, 2, 30, 0)).toBe(
+      Date.UTC(2024, 2, 10, 7, 30)
+    );
+  });
+
+  it('resolves the instant immediately after a DST gap', () => {
+    // 03:00 exists exactly once, at 07:00Z — the c2 candidate, not max(c1, c2)
+    expect(epochFromLocal('America/New_York', 2024, 3, 10, 3, 0, 0)).toBe(
+      Date.UTC(2024, 2, 10, 7, 0)
+    );
+  });
+
+  it('resolves an ambiguous local time west of UTC to its earlier occurrence', () => {
+    // 2024-11-03T01:30 happens twice in New York (05:30Z in EDT, 06:30Z in EST).
+    // Temporal's `compatible` disambiguation picks the earlier — this zone matches it.
+    // (See the KNOWN DEFECT note on epochFromLocal: zones east of UTC pick the later.)
+    expect(epochFromLocal('America/New_York', 2024, 11, 3, 1, 30, 0)).toBe(
+      Date.UTC(2024, 10, 3, 5, 30)
+    );
   });
 });

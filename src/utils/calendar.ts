@@ -205,6 +205,8 @@ export function fieldsFromInstant(epochMs: number, tz: string): IFields {
       case 'second':
         second = Number(part.value);
         break;
+      // Stryker disable next-line ConditionalExpression: equivalent — this is the last clause and its body is
+      // a bare break, so removing or short-circuiting it leaves the loop iteration unchanged.
       default:
         break;
     }
@@ -215,8 +217,14 @@ export function fieldsFromInstant(epochMs: number, tz: string): IFields {
 
 /**
  *  Absolute instant of a local wall-clock time in the given zone, via the
- *  two-candidate offset technique. A DST-gap local time resolves forward
- *  (constrain); a repeated local time resolves to its later occurrence.
+ *  two-candidate offset technique. A DST-gap local time resolves forward (constrain).
+ *
+ *  KNOWN DEFECT: a repeated (fall-back) local time resolves inconsistently — to the
+ *  later occurrence east of UTC (Europe/Berlin 02:30 → 01:30Z) and to the earlier one
+ *  west of UTC (America/New_York 01:30 → 05:30Z). The result depends on the sign of
+ *  the zone's offset, because `offsetAt(target)` probes a pseudo-epoch as if it were
+ *  an instant. Temporal's `compatible` disambiguation (which §9.3 invokes) always
+ *  picks the earlier occurrence. Fixing this changes observable behaviour east of UTC.
  */
 export function epochFromLocal(
   tz: string,
@@ -233,6 +241,9 @@ export function epochFromLocal(
   if (tz === 'UTC') return target;
   const offsetAt = (t: number): number => fieldsFromInstant(t, tz).pseudo - t;
   const c1 = target - offsetAt(target);
+  // Stryker disable next-line ConditionalExpression,ArithmeticOperator: equivalent — when this guard holds,
+  // offsetAt(c1) === offsetAt(target), so the fallthrough recomputes c2 === c1 and the next guard returns it.
+  // Skipping the early return therefore yields the identical instant; no input can observe the difference.
   if (offsetAt(c1) + c1 === target) return c1;
   const c2 = target - offsetAt(c1);
   if (offsetAt(c2) + c2 === target) return c2;
