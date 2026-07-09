@@ -13,7 +13,7 @@ import type {
   ITimeRange,
   Unit
 } from '../types/index.js';
-import { daysInMonth, epochDay } from '../utils/index.js';
+import { daysInMonth, epochDay, weeksInIsoYear } from '../utils/index.js';
 
 const MS_PER_DAY = 86_400_000;
 const SELECTOR_UNITS = 'YQMWDEHms';
@@ -124,6 +124,7 @@ class Parser {
   // -------------------------------
 
   private parseSelector(unit: Unit): ISelector {
+    const selPos = this.pos;
     this.pos++;
     let exclude = false;
     if (this.src[this.pos] === '!') {
@@ -136,6 +137,14 @@ class Parser {
     while (this.src[this.pos] === ',') {
       this.pos++;
       spans.push(this.parseSpan(unit).span);
+    }
+    // a list containing bare `*` is just the whole domain — write `M*` (spec §3)
+    if (spans.length > 1 && spans.some((s) => s.start === null && s.end === null)) {
+      this.fail(
+        'star-in-list',
+        `Bare '*' cannot appear in a list — '${unit}*' already covers the domain`,
+        selPos
+      );
     }
 
     const selector: ISelector = { unit, exclude, spans };
@@ -424,6 +433,10 @@ class Parser {
       const size = max - min + 1;
       const checkValue = (v: number | null): void => {
         if (v === null) return;
+        // Y has no edge to count back from (spec §3.1) — negatives are meaningless there
+        if (v < 0 && node.unit === 'Y') {
+          this.fail('out-of-domain', `Negative values are not valid for 'Y'`, pos);
+        }
         const ok = v < 0 ? v >= -size : v >= min && v <= max;
         if (!ok) this.fail('out-of-domain', `Value ${v} out of domain for '${node.unit}'`, pos);
       };
@@ -476,6 +489,88 @@ class Parser {
     }
     this.lintUnsatisfiableDay(selectors);
     this.lintUnsatisfiableMonthQuarter(selectors);
+    this.lintEmptyInvertedRanges(selectors);
+    this.lintUnsatisfiableWeek(selectors);
+  }
+
+  /**
+   *  A range with a negative endpoint never wraps (spec §3); it resolves per parent
+   *  instance and covers nothing where resolved start > end. When that is true in
+   *  EVERY instance (`M-2:2`, `D-1:5`), §9.1 says warn.
+   */
+  private lintEmptyInvertedRanges(selectors: IPositioned<ISelector>[]): void {
+    const present = new Set(selectors.map((s) => s.node.unit));
+    // smallest and largest instance maximum per unit (D/W vary with the calendar)
+    const instanceMax = (unit: Unit): { min: number; max: number } | null => {
+      switch (unit) {
+        case 'Q':
+          return { min: 4, max: 4 };
+        case 'M':
+          return { min: 12, max: 12 };
+        case 'E':
+          return { min: 7, max: 7 };
+        case 'H':
+          return { min: 23, max: 23 };
+        case 'm':
+        case 's':
+          return { min: 59, max: 59 };
+        case 'W':
+          return { min: 52, max: 53 };
+        case 'D':
+          return present.has('M')
+            ? { min: 28, max: 31 }
+            : present.has('Q')
+              ? { min: 90, max: 92 }
+              : present.has('Y')
+                ? { min: 365, max: 366 }
+                : { min: 28, max: 31 };
+        default:
+          return null; // Y: negatives are already rejected
+      }
+    };
+    for (const { node, pos } of selectors) {
+      if (node.exclude || node.stride) continue;
+      const edge = instanceMax(node.unit);
+      if (!edge) continue;
+      for (const span of node.spans) {
+        if (span.start === null || span.end === null) continue;
+        if (span.start >= 0 && span.end >= 0) continue; // both-positive is a wrap or forward range
+        const startMin = span.start < 0 ? edge.min + 1 + span.start : span.start;
+        const endMax = span.end < 0 ? edge.max + 1 + span.end : span.end;
+        if (startMin > endMax) {
+          this.warnings.push({
+            code: 'unsatisfiable',
+            message: `Range in '${node.unit}' resolves backwards in every parent instance — this expression covers nothing`,
+            position: pos
+          });
+          return;
+        }
+      }
+    }
+  }
+
+  /** `W53 Y2021` parses, but week-year 2021 has 52 weeks — spec §9.1 says warn. */
+  private lintUnsatisfiableWeek(selectors: IPositioned<ISelector>[]): void {
+    const weekSel = selectors.find((s) => s.node.unit === 'W' && !s.node.exclude);
+    const yearSel = selectors.find((s) => s.node.unit === 'Y' && !s.node.exclude);
+    if (!weekSel || !yearSel || weekSel.node.stride || yearSel.node.stride) return;
+    // only the "every listed week is 53" case is statically decidable
+    const needs53 = weekSel.node.spans.every((s) => s.start === 53 && s.end === 53);
+    if (!needs53) return;
+    let anyLongYear = false;
+    for (const span of yearSel.node.spans) {
+      if (span.start === null || span.end === null || span.end - span.start > 1000) return;
+      for (let y = span.start; y <= span.end; y++) {
+        if (weeksInIsoYear(y) === 53) anyLongYear = true;
+      }
+    }
+    if (!anyLongYear) {
+      this.warnings.push({
+        code: 'unsatisfiable',
+        message: 'Week 53 never occurs in the selected year(s) — this expression covers nothing',
+        position: weekSel.pos
+      });
+    }
   }
 
   /** `M-1 Q1` parses but December ∩ Q1 is empty — spec §9.1 says warn, don't error (spec §2). */

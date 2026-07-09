@@ -230,7 +230,7 @@ describe('describe/toString — branch outputs', () => {
   });
 
   it('drops a full-domain span only when the selector is a lone full domain', () => {
-    expect(ts('M*,5')).toBe('M*,5'); // first span is full-domain but it is a list → not dropped
+    expect(() => ts('M*,5')).toThrow(/list/); // bare '*' in a list is rejected (spec §3)
     expect(ts('M5:*')).toBe('M5:*'); // open-end span → not full-domain
     expect(ts('M*:5')).toBe('M*:5'); // open-start span → not full-domain
   });

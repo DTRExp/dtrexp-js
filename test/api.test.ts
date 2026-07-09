@@ -19,6 +19,15 @@ describe('validate()', () => {
     expect(validate('M12,1 Q2:3').warnings[0]?.code).toBe('unsatisfiable');
   });
 
+  it('warns on W53 only when every selected year is a 52-week year', () => {
+    expect(validate('W53 Y2021').warnings[0]?.code).toBe('unsatisfiable');
+    expect(validate('W53 Y2021:2023').warnings[0]?.code).toBe('unsatisfiable'); // 2021–23 are all 52-week years
+    expect(validate('W53 Y2020:2021').warnings).toEqual([]); // 2020 has 53 weeks
+    expect(validate('W53 Y2020:*').warnings).toEqual([]); // open span — statically undecidable
+    expect(validate('W53 Y1000:3000').warnings).toEqual([]); // too wide to scan
+    expect(validate('W53,1 Y2021').warnings).toEqual([]); // W1 always exists
+  });
+
   it('stays quiet when months and quarters do intersect', () => {
     expect(validate('M3 Q1').warnings).toEqual([]);
     expect(validate('M-1 Q4').warnings).toEqual([]);

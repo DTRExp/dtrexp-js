@@ -632,6 +632,142 @@
         "2020-01-06T02:15:00Z": false,
         "2020-01-06T03:15:00Z": true
       }
+    },
+    {
+      "id": "week-year-vs-calendar-fields",
+      "expression": "M12 W1 Y2026",
+      "tz": "UTC",
+      "cases": {
+        "2025-12-29T12:00:00Z": true,
+        "2026-01-01T12:00:00Z": false,
+        "2026-12-15T12:00:00Z": false,
+        "2024-12-30T12:00:00Z": false
+      }
+    },
+    {
+      "id": "wrap-with-exclusion",
+      "expression": "M!11:2",
+      "tz": "UTC",
+      "cases": {
+        "2024-01-15T12:00:00Z": false,
+        "2024-02-15T12:00:00Z": false,
+        "2024-11-15T12:00:00Z": false,
+        "2024-12-15T12:00:00Z": false,
+        "2024-03-15T12:00:00Z": true,
+        "2024-06-15T12:00:00Z": true
+      }
+    },
+    {
+      "id": "wrap-in-list",
+      "expression": "M11:2,5",
+      "tz": "UTC",
+      "cases": {
+        "2024-11-15T12:00:00Z": true,
+        "2024-01-15T12:00:00Z": true,
+        "2024-05-15T12:00:00Z": true,
+        "2024-04-15T12:00:00Z": false,
+        "2024-06-15T12:00:00Z": false
+      }
+    },
+    {
+      "id": "wrap-quarter",
+      "expression": "Q4:1",
+      "tz": "UTC",
+      "cases": {
+        "2024-01-15T12:00:00Z": true,
+        "2024-11-15T12:00:00Z": true,
+        "2024-05-15T12:00:00Z": false,
+        "2024-08-15T12:00:00Z": false
+      }
+    },
+    {
+      "id": "wrap-week53-partial",
+      "expression": "W53:2",
+      "tz": "UTC",
+      "cases": {
+        "2020-12-30T12:00:00Z": true,
+        "2021-01-06T12:00:00Z": true,
+        "2021-01-14T12:00:00Z": true,
+        "2021-01-20T12:00:00Z": false,
+        "2021-12-30T12:00:00Z": false,
+        "2022-01-05T12:00:00Z": true
+      }
+    },
+    {
+      "id": "open-start-hour",
+      "expression": "H*:3",
+      "tz": "UTC",
+      "cases": {
+        "2024-03-05T00:00:00Z": true,
+        "2024-03-05T02:30:00Z": true,
+        "2024-03-05T03:59:00Z": true,
+        "2024-03-05T04:00:00Z": false
+      }
+    },
+    {
+      "id": "stride-open-anchored",
+      "expression": "Y2020:*/3",
+      "tz": "UTC",
+      "cases": {
+        "2020-06-15T12:00:00Z": true,
+        "2023-06-15T12:00:00Z": true,
+        "2021-06-15T12:00:00Z": false,
+        "2035-06-15T12:00:00Z": true,
+        "2036-06-15T12:00:00Z": false
+      }
+    },
+    {
+      "id": "weekday-negative",
+      "expression": "E-1",
+      "tz": "UTC",
+      "cases": {
+        "2024-03-10T12:00:00Z": true,
+        "2024-03-11T12:00:00Z": false
+      }
+    },
+    {
+      "id": "ordinal-year-scope",
+      "expression": "E1#1 Y*",
+      "tz": "UTC",
+      "cases": {
+        "2024-01-01T12:00:00Z": true,
+        "2024-01-08T12:00:00Z": false,
+        "2026-01-05T12:00:00Z": true,
+        "2026-01-12T12:00:00Z": false
+      }
+    },
+    {
+      "id": "t-millisecond-precision",
+      "expression": "T093015.250:093015.750",
+      "tz": "UTC",
+      "cases": {
+        "2024-03-05T09:30:15.300Z": true,
+        "2024-03-05T09:30:15.200Z": false,
+        "2024-03-05T09:30:15.750Z": false,
+        "2024-03-05T09:30:15.749Z": true
+      }
+    },
+    {
+      "id": "no-space-components",
+      "expression": "M3Y2018",
+      "tz": "UTC",
+      "cases": {
+        "2018-03-15T12:00:00Z": true,
+        "2018-04-15T12:00:00Z": false,
+        "2019-03-15T12:00:00Z": false
+      }
+    },
+    {
+      "id": "cadence-cross-unit-duration",
+      "expression": "20200101/10D/36H",
+      "tz": "UTC",
+      "cases": {
+        "2020-01-01T06:00:00Z": true,
+        "2020-01-02T05:00:00Z": true,
+        "2020-01-02T13:00:00Z": false,
+        "2020-01-11T00:30:00Z": true,
+        "2020-01-06T12:00:00Z": false
+      }
     }
   ],
   "invalid": [
@@ -758,6 +894,30 @@
     {
       "expression": "20200101/10D/1M",
       "reason": "month/year duration unit requires a month/year period"
+    },
+    {
+      "expression": "Y-1",
+      "reason": "negative value on Y — no edge to count back from"
+    },
+    {
+      "expression": "M1,*",
+      "reason": "bare '*' in a list — the list is already the whole domain"
+    },
+    {
+      "expression": "T!0900:1200",
+      "reason": "T takes no exclusion — write the complement explicitly"
+    },
+    {
+      "expression": "T0900:*",
+      "reason": "T takes no '*'"
+    },
+    {
+      "expression": "T0900:1800/2",
+      "reason": "T takes no stride"
+    },
+    {
+      "expression": "20240101/2M/58D",
+      "reason": "duration not conservatively smaller than period (58d >= 2x28d)"
     }
   ],
   "warnings": [
@@ -768,6 +928,18 @@
     {
       "expression": "M-1 Q1",
       "warning": "unsatisfiable — M-1 is December, and December ∩ Q1 is empty"
+    },
+    {
+      "expression": "M-2:2",
+      "warning": "unsatisfiable — resolved start (November) exceeds end (February) in every year"
+    },
+    {
+      "expression": "D-1:5",
+      "warning": "unsatisfiable — the last day is never on or before day 5"
+    },
+    {
+      "expression": "W53 Y2021",
+      "warning": "unsatisfiable — week-year 2021 has 52 weeks"
     }
   ]
 }
