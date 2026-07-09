@@ -13,7 +13,7 @@
 
 > This module is **ESM** 🔆. Please [**read this**](https://gist.github.com/onury/d3f3d765d7db2e8b2d050d14315f2ac7).
 
-Reference TypeScript implementation of **[DTRExp](https://github.com/DTRExp/dtrexp)** — a compact string expression for date-time ranges and recursion, evaluated by **coverage** rather than enumeration.
+Reference TypeScript implementation of **[DTRExp](https://github.com/DTRExp/dtrexp)** (read: "**DTR Expression**") — a compact string expression for date-time ranges and recursion, evaluated by **coverage** rather than enumeration.
 
 ```
 T0900:1800 E1:5          Mon–Fri, 09:00–18:00
