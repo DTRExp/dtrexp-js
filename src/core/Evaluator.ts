@@ -60,6 +60,8 @@ export function selectorCoversValue(
   max: number
 ): boolean {
   // negative values count from the end of the parent's actual domain (spec §3/§9.1)
+  // Stryker disable next-line ConditionalExpression: equivalent — the null guard exists for the type
+  // checker only: `null < 0` is false, so dropping the guard selects the same branch for every input.
   const resolve = (v: number | null): number | null => (v !== null && v < 0 ? max + 1 + v : v);
 
   if (selector.stride) {
@@ -224,6 +226,10 @@ export function cadencePseudoWindows(c: ICadence, lo: number, hi: number): [numb
     const loDay = civilFromDays(Math.floor(lo / MS_PER_DAY));
     const elapsed = monthsBetween(
       { year: c.anchor.year, month: c.anchor.month, day: c.anchor.day, msOfDay: anchorMsOfDay },
+      // Stryker disable next-line ArithmeticOperator: equivalent — `elapsed` is only a starting guess:
+      // corrupting msOfDay shifts monthsBetween by at most one month (it can only flip the landing
+      // tie-break), and the loop below already starts one full period early and scans forward, so a
+      // ±1-month error in the guess selects the same window set for every input.
       { ...loDay, msOfDay: lo - Math.floor(lo / MS_PER_DAY) * MS_PER_DAY }
     );
     // constrain clamping wobbles occurrence starts — begin one period early
