@@ -450,13 +450,14 @@ class Parser {
         checkValue(span.start);
         checkValue(span.end);
         if (
-          // Stryker disable next-line ConditionalExpression,LogicalOperator: equivalent — a null start always fails `span.start > 0` below (`null > 0` is false); the guard only narrows types.
+          // Stryker disable next-line ConditionalExpression: equivalent — a null start coerces to 0 in `span.start > span.end`, and 0 > end is false for every end that passed `end >= 0`; the guard only narrows types.
           span.start !== null &&
-          // Stryker disable next-line ConditionalExpression: equivalent — mirror of the start guard: `null > 0` is false below.
           span.end !== null &&
-          // Stryker disable next-line EqualityOperator,ConditionalExpression: equivalent — a zero start cannot exceed a positive end, so admitting it changes no outcome.
-          span.start > 0 &&
-          span.end > 0 &&
+          // wrap is decided on literal non-negative endpoints only (spec §3): a negative
+          // endpoint resolves per instance and never wraps. `start > end >= 0` implies
+          // `start > 0`, so no separate start check is needed — and on 0-based domains a
+          // literal 0 end wraps like any other (`H22:0` = hours 22, 23, 0).
+          span.end >= 0 &&
           span.start > span.end
         ) {
           // wrap range (spec §3): start → domain edge, plus domain start → end.
@@ -548,10 +549,10 @@ class Parser {
       for (const span of node.spans) {
         // Stryker disable next-line ConditionalExpression,LogicalOperator: equivalent — a null endpoint makes startMin or endMax null, and `null > x` / `x > null` comparisons keep the lint quiet either way.
         if (span.start === null || span.end === null) continue;
-        // strictly-positive pairs are wraps or forward ranges; a zero endpoint (H22:0) is
-        // neither — it resolves per instance and can be statically empty like any negative
-        // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — after wrap-splitting, strictly-positive pairs are forward ranges whose startMin never exceeds endMax; scanning them is equally quiet.
-        if (span.start > 0 && span.end > 0) continue;
+        // non-negative pairs that survived wrap-splitting are forward ranges (zero ends
+        // wrap like any other literal, spec §3) — never statically empty
+        // Stryker disable next-line ConditionalExpression,EqualityOperator,LogicalOperator: equivalent — non-negative pairs are forward ranges whose startMin never exceeds endMax; scanning them is equally quiet.
+        if (span.start >= 0 && span.end >= 0) continue;
         const startMin = span.start < 0 ? edge.min + 1 + span.start : span.start;
         const endMax = span.end < 0 ? edge.max + 1 + span.end : span.end;
         if (startMin > endMax) {

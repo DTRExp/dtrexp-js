@@ -28,11 +28,18 @@ describe('validate()', () => {
     expect(validate('W53,1 Y2021').warnings).toEqual([]); // W1 always exists
   });
 
-  it('warns on a zero-endpoint range that is empty in every instance', () => {
-    // H22:0 neither wraps (0 is not positive) nor ever satisfies 22 <= h <= 0
-    expect(validate('H22:0').warnings[0]?.code).toBe('unsatisfiable');
+  it('treats a zero end as an ordinary wrap endpoint on 0-based domains', () => {
+    // H22:0 wraps (spec §3: literal non-negative endpoints) — hours 22, 23, 0; no warning
+    expect(validate('H22:0').valid).toBe(true);
+    expect(validate('H22:0').warnings).toEqual([]);
     expect(validate('H0:5').warnings).toEqual([]);
     expect(validate('H22:6').warnings).toEqual([]); // a true wrap stays quiet
+  });
+
+  it('resolves zero endpoints literally when the other endpoint is negative', () => {
+    // negative endpoints never wrap (spec §3); the zero side resolves as the literal 0
+    expect(validate('H0:-1').warnings).toEqual([]); // hours 0–23 in every instance — quiet
+    expect(validate('H-1:0').warnings[0]?.code).toBe('unsatisfiable'); // 23:0 backwards everywhere
   });
 
   it('stays quiet when months and quarters do intersect', () => {

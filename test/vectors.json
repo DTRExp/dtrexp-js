@@ -1,6 +1,6 @@
 {
-  "spec": 2.1,
-  "description": "DTRExp draft-2.1 conformance vectors. An implementation is conforming iff it (a) rejects every `invalid` expression at parse time, (b) reports a warning for every `warnings` expression while accepting it, and (c) returns the expected boolean from covers(instant, {tz}) for every instant in every `coverage` group. Instants are absolute (ISO 8601 UTC); `tz` is the evaluation time zone. These vectors — not the spec prose — are the contract.",
+  "spec": 2.2,
+  "description": "DTRExp draft-2.2 conformance vectors. An implementation is conforming iff it (a) rejects every `invalid` expression at parse time, (b) reports a warning for every `warnings` expression while accepting it, and (c) returns the expected boolean from covers(instant, {tz}) for every instant in every `coverage` group. Instants are absolute (ISO 8601 UTC); `tz` is the evaluation time zone. These vectors — not the spec prose — are the contract.",
   "coverage": [
     {
       "id": "month-single",
@@ -768,6 +768,75 @@
         "2020-01-11T00:30:00Z": true,
         "2020-01-06T12:00:00Z": false
       }
+    },
+    {
+      "id": "wrap-zero-endpoint",
+      "expression": "H22:0",
+      "tz": "UTC",
+      "cases": {
+        "2020-01-01T22:30:00Z": true,
+        "2020-01-01T23:30:00Z": true,
+        "2020-01-01T00:30:00Z": true,
+        "2020-01-01T01:30:00Z": false,
+        "2020-01-01T12:00:00Z": false
+      }
+    },
+    {
+      "id": "bounds-local-zone",
+      "expression": "20180120",
+      "tz": "Europe/Berlin",
+      "cases": {
+        "2018-01-19T23:30:00Z": true,
+        "2018-01-20T22:59:00Z": true,
+        "2018-01-19T22:30:00Z": false,
+        "2018-01-20T23:30:00Z": false
+      }
+    },
+    {
+      "id": "cadence-month-duration-end",
+      "expression": "20240131/3M/1M",
+      "tz": "UTC",
+      "cases": {
+        "2024-01-31T12:00:00Z": true,
+        "2024-02-15T12:00:00Z": true,
+        "2024-02-29T12:00:00Z": false,
+        "2024-04-30T12:00:00Z": true,
+        "2024-05-29T23:00:00Z": true,
+        "2024-05-30T12:00:00Z": false,
+        "2024-05-31T12:00:00Z": false
+      }
+    },
+    {
+      "id": "stride-year-open-large",
+      "expression": "Y2020:*/100",
+      "tz": "UTC",
+      "cases": {
+        "2020-06-01T00:00:00Z": true,
+        "2021-06-01T00:00:00Z": false,
+        "2120-06-01T00:00:00Z": true,
+        "2119-06-01T00:00:00Z": false
+      }
+    },
+    {
+      "id": "negative-symmetric-limit",
+      "expression": "D-31",
+      "tz": "UTC",
+      "cases": {
+        "2024-01-01T12:00:00Z": true,
+        "2024-01-02T12:00:00Z": false,
+        "2024-02-01T12:00:00Z": false,
+        "2024-03-01T12:00:00Z": true
+      }
+    },
+    {
+      "id": "negative-zero-based",
+      "expression": "H-1",
+      "tz": "UTC",
+      "cases": {
+        "2020-01-01T23:30:00Z": true,
+        "2020-01-01T22:30:00Z": false,
+        "2020-01-01T00:30:00Z": false
+      }
     }
   ],
   "invalid": [
@@ -918,6 +987,22 @@
     {
       "expression": "20240101/2M/58D",
       "reason": "duration not conservatively smaller than period (58d >= 2x28d)"
+    },
+    {
+      "expression": "T0900:0900",
+      "reason": "T range with equal endpoints — half-open, would cover nothing"
+    },
+    {
+      "expression": "20180120T09",
+      "reason": "malformed time-part in date literal — T-glue is unconditional, no re-tokenization"
+    },
+    {
+      "expression": "*:*",
+      "reason": "bounds require at least one date-literal endpoint"
+    },
+    {
+      "expression": "D-32",
+      "reason": "negative value out of domain — symmetric parse-time check (-31…-1 for month-scoped D)"
     }
   ],
   "warnings": [
@@ -940,6 +1025,10 @@
     {
       "expression": "W53 Y2021",
       "warning": "unsatisfiable — week-year 2021 has 52 weeks"
+    },
+    {
+      "expression": "D30 M2 | M3",
+      "warning": "unsatisfiable union branch — no February has 30 days; dead branches still warn"
     }
   ]
 }
