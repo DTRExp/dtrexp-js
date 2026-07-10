@@ -1,6 +1,6 @@
 {
-  "spec": 2.5,
-  "description": "DTRExp draft-2.5 conformance vectors. An implementation is conforming iff it (a) rejects every `invalid` expression at parse time, (b) reports a warning for every `warnings` expression while accepting it, (c) accepts every `quiet` expression with NO warnings, and (d) returns the expected boolean from covers(instant, {tz}) for every instant in every `coverage` group. Instants are absolute (ISO 8601 UTC); `tz` is the evaluation time zone. These vectors — not the spec prose — are the contract.",
+  "spec": 2.6,
+  "description": "DTRExp draft-2.6 conformance vectors. An implementation is conforming iff it (a) rejects every `invalid` expression at parse time, (b) reports a warning for every `warnings` expression while accepting it, (c) accepts every `quiet` expression with NO warnings, and (d) returns the expected boolean from covers(instant, {tz}) for every instant in every `coverage` group. Instants are absolute (ISO 8601 UTC); `tz` is the evaluation time zone. These vectors — not the spec prose — are the contract.",
   "coverage": [
     {
       "id": "month-single",
@@ -974,6 +974,15 @@
         "2018-01-20T18:00:00Z": true,
         "2018-01-20T18:00:01Z": false
       }
+    },
+    {
+      "id": "year-domain-edge",
+      "expression": "Y9999",
+      "tz": "UTC",
+      "cases": {
+        "9999-06-15T12:00:00Z": true,
+        "9998-06-15T12:00:00Z": false
+      }
     }
   ],
   "invalid": [
@@ -1136,6 +1145,14 @@
     {
       "expression": "Y-1",
       "reason": "negative value on Y — no edge to count back from"
+    },
+    {
+      "expression": "Y0",
+      "reason": "year out of domain — Y takes 4-digit ISO years (1-9999)"
+    },
+    {
+      "expression": "Y12000",
+      "reason": "year out of domain — Y takes 4-digit ISO years (1-9999)"
     },
     {
       "expression": "M1,*",
