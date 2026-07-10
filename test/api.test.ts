@@ -1,5 +1,16 @@
 import { DTRExp, parse, validate } from '../src/index.js';
 
+describe('DTRExp#warnings', () => {
+  it('is empty for a clean expression', () => {
+    expect(parse('M3 Y2018').warnings).toEqual([]);
+  });
+
+  it('carries the same content as validate().warnings', () => {
+    expect(parse('D30 M2').warnings).toEqual(validate('D30 M2').warnings);
+    expect(parse('D30 M2').warnings[0]?.code).toBe('unsatisfiable');
+  });
+});
+
 describe('validate()', () => {
   it('accepts a valid expression with no warnings', () => {
     expect(validate('M3 Y2018')).toEqual({ valid: true, errors: [], warnings: [] });

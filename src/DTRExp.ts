@@ -21,16 +21,23 @@ import type {
 export class DTRExp {
   /** The original expression, verbatim. */
   readonly source: string;
+  /**
+   *  The spec §9.1 unsatisfiability warnings of this expression — same content
+   *  as `validate(source).warnings`, exposed here so code that parses directly
+   *  doesn't lose them. Empty for a clean expression.
+   */
+  readonly warnings: readonly IIssue[];
   private readonly ir: IDTRExpIR;
 
-  private constructor(source: string, ir: IDTRExpIR) {
+  private constructor(source: string, ir: IDTRExpIR, warnings: readonly IIssue[]) {
     this.source = source;
     this.ir = ir;
+    this.warnings = warnings;
   }
 
   /** @internal Used by {@link parse} — not part of the public API. */
-  static _create(source: string, ir: IDTRExpIR): DTRExp {
-    return new DTRExp(source, ir);
+  static _create(source: string, ir: IDTRExpIR, warnings: readonly IIssue[]): DTRExp {
+    return new DTRExp(source, ir, warnings);
   }
 
   /**
@@ -109,7 +116,8 @@ export class DTRExp {
  *  const businessHours = parse('T0900-1800 E1-5');
  */
 export function parse(expression: string): DTRExp {
-  return DTRExp._create(expression, parseToIR(expression).ir);
+  const { ir, warnings } = parseToIR(expression);
+  return DTRExp._create(expression, ir, warnings);
 }
 
 /**

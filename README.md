@@ -82,6 +82,7 @@ parse('D25 M12').toRRule();
 | `describe(locale?)` | Human-readable English rendering (`'E7#-1 M4'` → *"the last Sunday in April"*). v1 supports `'en'`; the parameter is reserved. |
 | `toRRule()` | RFC 5545 RRULE (+ `DTSTART` line when anchored) for the losslessly-mappable subset, else `null`. Constrained cadences emit RFC 7529 `SKIP=BACKWARD`. |
 | `toString()` | Canonical normalized form (redundant components dropped, canonical order, wraps re-fused). |
+| `warnings` | The spec §9.1 warnings of the parsed expression — same content as `validate().warnings`, so parsing directly doesn't lose them. |
 | `source` | The original expression, verbatim. |
 
 ### Inputs & options
