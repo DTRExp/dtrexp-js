@@ -13,7 +13,7 @@
 
 > This module is **ESM** 🔆. Please [**read this**](https://gist.github.com/onury/d3f3d765d7db2e8b2d050d14315f2ac7).
 
-Reference TypeScript implementation of **[DTRExp](https://github.com/DTRExp/dtrexp)** (read: "**DTR Expression**") — a compact string expression for date-time ranges and recursion, evaluated by **coverage** rather than enumeration.
+Reference TypeScript implementation of **[DTRExp](https://github.com/DTRExp/dtrexp)** (read: "**DTR Expression**") — a compact string expression for date-time ranges and recurrence, evaluated by **coverage** rather than enumeration.
 
 ```
 T0900:1800 E1:5          Mon–Fri, 09:00–18:00
@@ -100,8 +100,8 @@ The full grammar and semantics live in the **[specification](https://github.com/
 | Exclusion | `M!5,7:9` | domain minus the set |
 | Ordinal | `E7#2`, `E7#-1` | nth / nth-from-last weekday in scope |
 | Time of day | `T0900:1200,1300:1800`, `T2200:0600` | half-open clock ranges; midnight wrap stays within the day |
-| Stride | `H0/4`, `M1/5/2`, `Y2020:2040/3` | calendar-locked repetition — `/interval[/duration]` |
-| Cadence | `20200106/10D/3D`, `20180301/14M` | anchor-based repetition that drifts across the calendar |
+| Stride | `H0/4`, `M1/5/2`, `Y2020:2040/3` | calendar-locked recurrence — `/interval[/duration]` |
+| Cadence | `20200106/10D/3D`, `20180301/14M` | anchor-based recurrence that drifts across the calendar |
 | Bounds | `20150101:*`, `*:20291231`, `20180120` | absolute window / single day |
 | Union | `E5#1 \| E5#3` | either expression |
 
