@@ -1,6 +1,6 @@
 {
-  "spec": 2.3,
-  "description": "DTRExp draft-2.3 conformance vectors. An implementation is conforming iff it (a) rejects every `invalid` expression at parse time, (b) reports a warning for every `warnings` expression while accepting it, and (c) returns the expected boolean from covers(instant, {tz}) for every instant in every `coverage` group. Instants are absolute (ISO 8601 UTC); `tz` is the evaluation time zone. These vectors — not the spec prose — are the contract.",
+  "spec": 2.4,
+  "description": "DTRExp draft-2.4 conformance vectors. An implementation is conforming iff it (a) rejects every `invalid` expression at parse time, (b) reports a warning for every `warnings` expression while accepting it, (c) accepts every `quiet` expression with NO warnings, and (d) returns the expected boolean from covers(instant, {tz}) for every instant in every `coverage` group. Instants are absolute (ISO 8601 UTC); `tz` is the evaluation time zone. These vectors — not the spec prose — are the contract.",
   "coverage": [
     {
       "id": "month-single",
@@ -888,6 +888,61 @@
         "2024-10-27T01:31:30Z": false,
         "2024-10-27T00:31:30Z": false
       }
+    },
+    {
+      "id": "time-hour24-range-end",
+      "expression": "T2200:2400",
+      "tz": "UTC",
+      "cases": {
+        "2024-03-15T22:00:00Z": true,
+        "2024-03-15T23:59:59Z": true,
+        "2024-03-15T21:59:59Z": false,
+        "2024-03-16T00:00:00Z": false
+      }
+    },
+    {
+      "id": "time-hour24-whole-day",
+      "expression": "T0000:2400",
+      "tz": "UTC",
+      "cases": {
+        "2024-03-15T00:00:00Z": true,
+        "2024-03-15T12:00:00Z": true,
+        "2024-03-15T23:59:59Z": true
+      }
+    },
+    {
+      "id": "dst-cadence-wallclock-duration",
+      "expression": "20241026T2300/2D/12H",
+      "tz": "Europe/Berlin",
+      "cases": {
+        "2024-10-26T20:59:00Z": false,
+        "2024-10-26T21:30:00Z": true,
+        "2024-10-27T00:30:00Z": true,
+        "2024-10-27T01:30:00Z": true,
+        "2024-10-27T09:30:00Z": true,
+        "2024-10-27T10:30:00Z": false,
+        "2024-10-28T12:00:00Z": false,
+        "2024-10-28T22:30:00Z": true
+      }
+    },
+    {
+      "id": "selector-star-star-range",
+      "expression": "M*:*",
+      "tz": "UTC",
+      "cases": {
+        "2024-03-15T12:00:00Z": true,
+        "2019-11-01T00:00:00Z": true
+      }
+    },
+    {
+      "id": "day-of-year-leap",
+      "expression": "D366 Y2020",
+      "tz": "UTC",
+      "cases": {
+        "2020-12-31T12:00:00Z": true,
+        "2020-12-30T12:00:00Z": false,
+        "2021-12-31T12:00:00Z": false
+      }
     }
   ],
   "invalid": [
@@ -1004,6 +1059,30 @@
       "reason": "minute out of range in time value"
     },
     {
+      "expression": "T2400:0100",
+      "reason": "'2400' is valid only in range-end position"
+    },
+    {
+      "expression": "T22:24",
+      "reason": "hour 24 is the exact 4-digit token '2400' — 2-digit '24' is not a valid range end"
+    },
+    {
+      "expression": "T2300:24",
+      "reason": "hour 24 is the exact 4-digit token '2400', whatever the start's precision"
+    },
+    {
+      "expression": "T0000:240000",
+      "reason": "hour 24 never carries seconds precision — the exact token '2400' only"
+    },
+    {
+      "expression": "T0000:2430",
+      "reason": "hour out of range — 24 exists only as the exact token '2400'"
+    },
+    {
+      "expression": "T0900:2500",
+      "reason": "hour out of range in range-end position"
+    },
+    {
       "expression": "M3 |",
       "reason": "empty union branch"
     },
@@ -1080,6 +1159,40 @@
     {
       "expression": "D30 M2 | M3",
       "warning": "unsatisfiable union branch — no February has 30 days; dead branches still warn"
+    },
+    {
+      "expression": "D366 Y2021",
+      "warning": "unsatisfiable — calendar year 2021 has 365 days (the day-of-year twin of W53)"
+    },
+    {
+      "expression": "D366:* Y2021",
+      "warning": "unsatisfiable — 366:* resolves to 366:365 in 2021, backwards in every instance"
+    }
+  ],
+  "quiet": [
+    {
+      "expression": "D366 Y2020",
+      "note": "leap year 2020 has a day 366"
+    },
+    {
+      "expression": "D366:* Y2020",
+      "note": "366:* resolves to 366:366 in a leap year — nonempty"
+    },
+    {
+      "expression": "W53 Y2020",
+      "note": "week-year 2020 has 53 weeks"
+    },
+    {
+      "expression": "D366 Y2020:*",
+      "note": "open year span — statically undecidable, stays quiet"
+    },
+    {
+      "expression": "D366 W1 Y2025",
+      "note": "with W present, Y is the week-year: day 366 of calendar 2024 (Dec 31) lies in week-year 2025 W1 — cross-selector analysis, stays quiet"
+    },
+    {
+      "expression": "H22:6",
+      "note": "a true wrap range (literal non-negative endpoints) is never statically empty"
     }
   ]
 }

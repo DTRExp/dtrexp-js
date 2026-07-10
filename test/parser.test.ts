@@ -20,6 +20,15 @@ describe('parser: conformance — warning vectors', () => {
   }
 });
 
+describe('parser: conformance — quiet vectors', () => {
+  for (const { expression, note } of vectors.quiet) {
+    it(`stays quiet on '${expression}' (${note})`, () => {
+      const { warnings } = parseToIR(expression);
+      expect(warnings).toEqual([]);
+    });
+  }
+});
+
 describe('parser: conformance — coverage expressions all parse', () => {
   for (const group of vectors.coverage) {
     it(`parses '${group.expression}' (${group.id})`, () => {

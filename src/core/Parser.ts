@@ -13,7 +13,7 @@ import type {
   ITimeRange,
   Unit
 } from '../types/index.js';
-import { daysInMonth, epochDay, weeksInIsoYear } from '../utils/index.js';
+import { daysInMonth, daysInYear, epochDay, weeksInIsoYear } from '../utils/index.js';
 
 const MS_PER_DAY = 86_400_000;
 const SELECTOR_UNITS = 'YQMWDEHms';
@@ -287,9 +287,15 @@ class Parser {
       msPart = Number(frac);
       unitMs = 1;
     }
-    const is24 = hh === 24 && mm === 0 && ss === 0 && msPart === 0;
-    if (is24 && !isEnd) this.fail('bad-time-value', "'2400' is valid only as a range end", pos);
-    if (!is24 && hh > 23) this.fail('bad-time-value', `Hour out of range: ${hh}`, pos);
+    // hour 24 exists only as the exact 4-digit token '2400' in range-end position (spec §4)
+    const is24 = isEnd && hh === 24 && digits.length === 4 && mm === 0;
+    if (!is24 && hh > 23) {
+      this.fail(
+        'bad-time-value',
+        `Hour out of range: ${hh} (hour 24 is written exactly '2400', and only as a range end)`,
+        pos
+      );
+    }
     if (mm > 59) this.fail('bad-time-value', `Minute out of range: ${mm}`, pos);
     if (ss > 59) this.fail('bad-time-value', `Second out of range: ${ss}`, pos);
     return { ms: hh * 3_600_000 + mm * 60_000 + ss * 1000 + msPart, unitMs };
@@ -502,6 +508,7 @@ class Parser {
     this.lintUnsatisfiableMonthQuarter(selectors);
     this.lintEmptyInvertedRanges(selectors);
     this.lintUnsatisfiableWeek(selectors);
+    this.lintUnsatisfiableDayOfYear(selectors);
   }
 
   /**
@@ -588,6 +595,44 @@ class Parser {
         code: 'unsatisfiable',
         message: 'Week 53 never occurs in the selected year(s) — this expression covers nothing',
         position: weekSel.pos
+      });
+    }
+  }
+
+  /** `D366 Y2021` parses, but calendar year 2021 has 365 days — the day-of-year twin of W53 (spec §9.1). */
+  private lintUnsatisfiableDayOfYear(selectors: IPositioned<ISelector>[]): void {
+    const daySel = selectors.find((s) => s.node.unit === 'D' && !s.node.exclude);
+    const yearSel = selectors.find((s) => s.node.unit === 'Y' && !s.node.exclude);
+    if (!daySel || !yearSel || daySel.node.stride || yearSel.node.stride) return;
+    // D is year-scoped only when M/Q are absent (spec §2); with W present, Y is the
+    // week-year while day-of-year stays calendar — cross-selector territory, stays
+    // quiet: D366 W1 Y2025 covers Dec 31 2024 (spec §9.1)
+    if (selectors.some((s) => 'MQW'.includes(s.node.unit))) return;
+    const sizes = new Set<number>();
+    for (const span of yearSel.node.spans) {
+      // Stryker disable next-line ConditionalExpression,EqualityOperator,LogicalOperator: equivalent — an open or over-wide year span either returns early or scans decades, whose size set {365, 366} satisfies every parseable day span; both stay quiet.
+      if (span.start === null || span.end === null || span.end - span.start > 1000) return;
+      for (let y = span.start; y <= span.end; y++) sizes.add(daysInYear(y));
+    }
+    // satisfiable iff some span covers a real day in some selected year's domain;
+    // spans were wrap-split at parse, so a start > end pair only arises from
+    // negative endpoints and covers nothing in that instance (spec §3)
+    // Stryker disable next-line EqualityOperator: equivalent — 0 is out of domain for D (rejected at parse), so < and <= coincide.
+    const resolve = (v: number, size: number): number => (v < 0 ? size + 1 + v : v);
+    const satisfiable = [...sizes].some((size) =>
+      daySel.node.spans.some((span) => {
+        // Stryker disable next-line ConditionalExpression: equivalent — a null start resolves to null, and Math.max(null, 1) is the same 1.
+        const lo = span.start === null ? 1 : resolve(span.start, size);
+        const hi = span.end === null ? size : resolve(span.end, size);
+        return Math.max(lo, 1) <= Math.min(hi, size);
+      })
+    );
+    if (!satisfiable) {
+      this.warnings.push({
+        code: 'unsatisfiable',
+        message:
+          'The selected day(s) of year never occur in the selected year(s) — this expression covers nothing',
+        position: daySel.pos
       });
     }
   }

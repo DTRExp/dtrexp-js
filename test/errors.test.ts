@@ -201,9 +201,17 @@ describe('parser: time-value edges', () => {
     expect(validate('T1200:1200').errors[0]?.code).toBe('empty-time-range');
   });
 
-  it("accepts '2400' only as a pure midnight end", () => {
+  it("hour 24 is exactly the 4-digit '2400', in range-end position only", () => {
     expect(validate('T0000:2401').errors[0]?.code).toBe('bad-time-value');
     expect(validate('T0000:240030').errors[0]?.code).toBe('bad-time-value');
+    expect(validate('T22:24').errors[0]?.code).toBe('bad-time-value'); // 2-digit 24
+    expect(validate('T2300:24').errors[0]?.code).toBe('bad-time-value');
+    expect(validate('T0000:240000').errors[0]?.code).toBe('bad-time-value'); // seconds precision
+    expect(validate('T0000:2430').errors[0]?.code).toBe('bad-time-value');
+    expect(validate('T2400:0100').errors[0]?.code).toBe('bad-time-value'); // range start
+    expect(validate('T0900:2500').errors[0]?.code).toBe('bad-time-value'); // hour 25 in end position
+    expect(validate('T2200:2400').errors).toEqual([]); // the one valid spelling
+    expect(validate('T2300:2400').errors).toEqual([]); // hour 23 stays an ordinary value
   });
 
   it('allows fractional seconds only after six digits', () => {

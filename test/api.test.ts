@@ -28,6 +28,26 @@ describe('validate()', () => {
     expect(validate('W53,1 Y2021').warnings).toEqual([]); // W1 always exists
   });
 
+  it('warns on year-scoped D only when it misses every selected calendar year', () => {
+    expect(validate('D366 Y2021').warnings[0]?.code).toBe('unsatisfiable');
+    expect(validate('D366 Y2021').warnings[0]?.message).toMatch(/never occur/);
+    expect(validate('D366 Y2021:2023').warnings[0]?.code).toBe('unsatisfiable'); // 2021–23 are all common years
+    expect(validate('D366:* Y2021').warnings[0]?.code).toBe('unsatisfiable'); // 366:* resolves 366:365 — empty
+    expect(validate('D-366 Y2021').warnings[0]?.code).toBe('unsatisfiable'); // 366th-from-last needs 366 days
+    expect(validate('E1 D366 Y2021').warnings[0]?.code).toBe('unsatisfiable'); // E doesn't rescope D
+    expect(validate('D366 Y2020').warnings).toEqual([]); // leap year has a day 366
+    expect(validate('D366:* Y2020').warnings).toEqual([]);
+    expect(validate('D-366 Y2020').warnings).toEqual([]);
+    expect(validate('D366 Y2020:2021').warnings).toEqual([]);
+    expect(validate('D366 Y2020:*').warnings).toEqual([]); // open span — statically undecidable
+    expect(validate('D366 Y1000:3000').warnings).toEqual([]); // too wide to scan
+    expect(validate('D366,1 Y2021').warnings).toEqual([]); // D1 always exists
+    expect(validate('D!366 Y2021').warnings).toEqual([]); // exclusions are skipped
+    expect(validate('D*:5 Y2021').warnings).toEqual([]); // a star start resolves to day 1
+    expect(validate('D366 W1 Y2025').warnings).toEqual([]); // Y is the week-year here — Dec 31 2024 is day 366 inside it
+    expect(validate('D366 Y2021/2').warnings).toEqual([]); // strides are skipped
+  });
+
   it('treats a zero end as an ordinary wrap endpoint on 0-based domains', () => {
     // H22:0 wraps (spec §3: literal non-negative endpoints) — hours 22, 23, 0; no warning
     expect(validate('H22:0').valid).toBe(true);
@@ -40,6 +60,7 @@ describe('validate()', () => {
     // negative endpoints never wrap (spec §3); the zero side resolves as the literal 0
     expect(validate('H0:-1').warnings).toEqual([]); // hours 0–23 in every instance — quiet
     expect(validate('H-1:0').warnings[0]?.code).toBe('unsatisfiable'); // 23:0 backwards everywhere
+    expect(validate('D-1:350 Y*').warnings[0]?.code).toBe('unsatisfiable'); // year-scoped: day 365/366 is never ≤ 350
   });
 
   it('stays quiet when months and quarters do intersect', () => {
