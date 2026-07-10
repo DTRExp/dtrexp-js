@@ -89,7 +89,7 @@ parse('D25 M12').toRRule();
 - **Instants** (`DateInput`): `Date`, epoch milliseconds, ISO 8601 string, or any Temporal-like object exposing `epochMilliseconds` — no Temporal dependency.
 - **`opts.tz`**: IANA time zone for evaluation, default `'UTC'`. The zone is always an **evaluation parameter**, never part of the expression — `T0900:1800` means local business hours wherever you evaluate it. DST is handled per spec §9.3: spring-forward gap times cover nothing; repeated fall-back times are covered on both passes.
 
-## Expression syntax (spec draft 2.1)
+## Expression syntax (spec draft 2.8)
 
 The full grammar and semantics live in the **[specification](https://github.com/DTRExp/dtrexp/blob/main/spec.md)**; the essentials:
 

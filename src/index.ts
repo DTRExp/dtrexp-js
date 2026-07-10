@@ -15,4 +15,4 @@ export type {
 } from './types/index.js';
 
 /** The DTRExp specification draft this package implements. */
-export const SPEC_DRAFT = 2.1;
+export const SPEC_DRAFT = 2.8;

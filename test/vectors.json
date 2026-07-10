@@ -1,6 +1,6 @@
 {
   "spec": 2.7,
-  "description": "DTRExp draft-2.7 conformance vectors. An implementation is conforming iff it (a) rejects every `invalid` expression at parse time, (b) reports a warning for every `warnings` expression while accepting it, (c) accepts every `quiet` expression with NO warnings, and (d) returns the expected boolean from covers(instant, {tz}) for every instant in every `coverage` group. Instants are absolute (ISO 8601 UTC); `tz` is the evaluation time zone. These vectors — not the spec prose — are the contract.",
+  "description": "DTRExp draft-2.8 conformance vectors. An implementation is conforming iff it (a) rejects every `invalid` expression at parse time, (b) reports a warning for every `warnings` expression while accepting it, (c) accepts every `quiet` expression with NO warnings, and (d) returns the expected boolean from covers(instant, {tz}) for every instant in every `coverage` group. Instants are absolute (ISO 8601 UTC); `tz` is the evaluation time zone. These vectors — not the spec prose — are the contract.",
   "coverage": [
     {
       "id": "month-single",

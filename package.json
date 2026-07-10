@@ -44,7 +44,6 @@
     "datetime",
     "range",
     "recurrence",
-    "recurrence",
     "expression",
     "schedule",
     "interval",
