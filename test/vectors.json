@@ -1,6 +1,6 @@
 {
-  "spec": 2.4,
-  "description": "DTRExp draft-2.4 conformance vectors. An implementation is conforming iff it (a) rejects every `invalid` expression at parse time, (b) reports a warning for every `warnings` expression while accepting it, (c) accepts every `quiet` expression with NO warnings, and (d) returns the expected boolean from covers(instant, {tz}) for every instant in every `coverage` group. Instants are absolute (ISO 8601 UTC); `tz` is the evaluation time zone. These vectors — not the spec prose — are the contract.",
+  "spec": 2.5,
+  "description": "DTRExp draft-2.5 conformance vectors. An implementation is conforming iff it (a) rejects every `invalid` expression at parse time, (b) reports a warning for every `warnings` expression while accepting it, (c) accepts every `quiet` expression with NO warnings, and (d) returns the expected boolean from covers(instant, {tz}) for every instant in every `coverage` group. Instants are absolute (ISO 8601 UTC); `tz` is the evaluation time zone. These vectors — not the spec prose — are the contract.",
   "coverage": [
     {
       "id": "month-single",
@@ -943,6 +943,37 @@
         "2020-12-30T12:00:00Z": false,
         "2021-12-31T12:00:00Z": false
       }
+    },
+    {
+      "id": "dst-cadence-anchor-gap-forward",
+      "expression": "20240331T0230/4H",
+      "tz": "Europe/Berlin",
+      "cases": {
+        "2024-03-31T01:15:00Z": false,
+        "2024-03-31T01:45:00Z": true,
+        "2024-03-31T02:15:00Z": true,
+        "2024-03-31T05:15:00Z": false,
+        "2024-03-31T05:45:00Z": true
+      }
+    },
+    {
+      "id": "bounds-equal-literals-minute",
+      "expression": "20180120T1800:20180120T1800",
+      "tz": "UTC",
+      "cases": {
+        "2018-01-20T17:59:59Z": false,
+        "2018-01-20T18:00:30Z": true,
+        "2018-01-20T18:01:00Z": false
+      }
+    },
+    {
+      "id": "bounds-mixed-precision",
+      "expression": "20180120T1800:20180120T180000",
+      "tz": "UTC",
+      "cases": {
+        "2018-01-20T18:00:00Z": true,
+        "2018-01-20T18:00:01Z": false
+      }
     }
   ],
   "invalid": [
@@ -1037,6 +1068,14 @@
     {
       "expression": "20180301:20170301",
       "reason": "backwards bounds range"
+    },
+    {
+      "expression": "20180120T1801:20180120T1800",
+      "reason": "backwards bounds — the start span begins exactly at the end span's end, an empty window"
+    },
+    {
+      "expression": "D0",
+      "reason": "zero value on a 1-based domain"
     },
     {
       "expression": "E7#0",
