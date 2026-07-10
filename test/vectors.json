@@ -1,6 +1,6 @@
 {
-  "spec": 2.6,
-  "description": "DTRExp draft-2.6 conformance vectors. An implementation is conforming iff it (a) rejects every `invalid` expression at parse time, (b) reports a warning for every `warnings` expression while accepting it, (c) accepts every `quiet` expression with NO warnings, and (d) returns the expected boolean from covers(instant, {tz}) for every instant in every `coverage` group. Instants are absolute (ISO 8601 UTC); `tz` is the evaluation time zone. These vectors — not the spec prose — are the contract.",
+  "spec": 2.7,
+  "description": "DTRExp draft-2.7 conformance vectors. An implementation is conforming iff it (a) rejects every `invalid` expression at parse time, (b) reports a warning for every `warnings` expression while accepting it, (c) accepts every `quiet` expression with NO warnings, and (d) returns the expected boolean from covers(instant, {tz}) for every instant in every `coverage` group. Instants are absolute (ISO 8601 UTC); `tz` is the evaluation time zone. These vectors — not the spec prose — are the contract.",
   "coverage": [
     {
       "id": "month-single",
@@ -983,6 +983,92 @@
         "9999-06-15T12:00:00Z": true,
         "9998-06-15T12:00:00Z": false
       }
+    },
+    {
+      "id": "union-no-space",
+      "expression": "M3|M5",
+      "tz": "UTC",
+      "cases": {
+        "2024-03-15T12:00:00Z": true,
+        "2024-05-15T12:00:00Z": true,
+        "2024-04-15T12:00:00Z": false
+      }
+    },
+    {
+      "id": "whitespace-tolerance",
+      "expression": " M3 | M5 ",
+      "tz": "UTC",
+      "cases": {
+        "2024-03-15T12:00:00Z": true,
+        "2024-05-15T12:00:00Z": true,
+        "2024-04-15T12:00:00Z": false
+      }
+    },
+    {
+      "id": "time-range-endpoint-span-start",
+      "expression": "T0900:12",
+      "tz": "UTC",
+      "cases": {
+        "2024-03-05T08:59:59Z": false,
+        "2024-03-05T09:00:00Z": true,
+        "2024-03-05T11:59:59Z": true,
+        "2024-03-05T12:00:00Z": false,
+        "2024-03-05T12:30:00Z": false
+      }
+    },
+    {
+      "id": "day-scope-order-free",
+      "expression": "Q2 D40",
+      "tz": "UTC",
+      "cases": {
+        "2024-05-10T12:00:00Z": true,
+        "2024-05-11T12:00:00Z": false,
+        "2024-04-15T12:00:00Z": false
+      }
+    },
+    {
+      "id": "stride-negative-end",
+      "expression": "D2:-1/5",
+      "tz": "UTC",
+      "cases": {
+        "2024-02-02T12:00:00Z": true,
+        "2024-02-07T12:00:00Z": true,
+        "2024-02-08T12:00:00Z": false,
+        "2024-02-27T12:00:00Z": true,
+        "2024-02-29T12:00:00Z": false
+      }
+    },
+    {
+      "id": "ordinal-negative-base",
+      "expression": "E-1#2",
+      "tz": "UTC",
+      "cases": {
+        "2026-07-12T12:00:00Z": true,
+        "2026-07-05T12:00:00Z": false,
+        "2026-07-19T12:00:00Z": false
+      }
+    },
+    {
+      "id": "absolute-grid-day-duration",
+      "expression": "20200101/48H/1D",
+      "tz": "Europe/Berlin",
+      "cases": {
+        "2020-03-28T12:00:00Z": false,
+        "2020-03-29T12:00:00Z": true,
+        "2020-03-29T22:30:00Z": true,
+        "2020-03-29T23:30:00Z": false
+      }
+    },
+    {
+      "id": "star-range-in-list",
+      "expression": "M11:*,5",
+      "tz": "UTC",
+      "cases": {
+        "2024-11-15T12:00:00Z": true,
+        "2024-12-15T12:00:00Z": true,
+        "2024-05-15T12:00:00Z": true,
+        "2024-06-15T12:00:00Z": false
+      }
     }
   ],
   "invalid": [
@@ -1179,6 +1265,30 @@
       "reason": "T range with equal endpoints — half-open, would cover nothing"
     },
     {
+      "expression": "T12:1200",
+      "reason": "equal resolved endpoints — range endpoints resolve to span-start instants"
+    },
+    {
+      "expression": "M3\tM5",
+      "reason": "whitespace is the ASCII space only — tabs are syntax errors"
+    },
+    {
+      "expression": "H-0",
+      "reason": "'-0' is not a value — the sign requires a nonzero integer"
+    },
+    {
+      "expression": "M-0",
+      "reason": "'-0' is not a value — the sign requires a nonzero integer"
+    },
+    {
+      "expression": "Q2 D40 M1",
+      "reason": "M wins D's scope by granularity, never textual order — D40 is out of the month domain"
+    },
+    {
+      "expression": "20180120T2400/1D",
+      "reason": "hour 24 never appears in a date literal — it is a T-range token only"
+    },
+    {
       "expression": "20180120T09",
       "reason": "malformed time-part in date literal — T-glue is unconditional, no re-tokenization"
     },
@@ -1223,6 +1333,10 @@
     {
       "expression": "D366:* Y2021",
       "warning": "unsatisfiable — 366:* resolves to 366:365 in 2021, backwards in every instance"
+    },
+    {
+      "expression": "D30:*/2 M2",
+      "warning": "unsatisfiable — a stride is sugar over a range; no February reaches day 30"
     }
   ],
   "quiet": [

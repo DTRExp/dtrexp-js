@@ -12,6 +12,11 @@ describe('validate()', () => {
     expect(result.warnings[0]?.code).toBe('unsatisfiable');
   });
 
+  it('applies the day lint to strides by their anchor', () => {
+    expect(validate('D30:*/2 M2').warnings[0]?.code).toBe('unsatisfiable'); // dead anchor — no Feb reaches day 30
+    expect(validate('D5:*/2 M2').warnings).toEqual([]); // live anchor stays quiet
+  });
+
   it('warns when the selected months never fall inside the selected quarters', () => {
     // negatives resolve against their own scope: M-1 is December (spec §2, §9.1)
     expect(validate('M-1 Q1').warnings[0]?.code).toBe('unsatisfiable');

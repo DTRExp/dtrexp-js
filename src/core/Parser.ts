@@ -677,7 +677,7 @@ class Parser {
   private lintUnsatisfiableDay(selectors: IPositioned<ISelector>[]): void {
     const daySel = selectors.find((s) => s.node.unit === 'D' && !s.node.exclude);
     const monthSel = selectors.find((s) => s.node.unit === 'M' && !s.node.exclude);
-    if (!daySel || !monthSel || daySel.node.stride || monthSel.node.stride) return;
+    if (!daySel || !monthSel || monthSel.node.stride) return;
     let maxDays = 0;
     for (const span of monthSel.node.spans) {
       // Stryker disable next-line ConditionalExpression,LogicalOperator,EqualityOperator: equivalent — proceeding past a null or negative month span indexes MONTH_MAX_DAYS out of range, Math.max yields NaN, and `minDay > NaN` is false: quiet either way.
@@ -686,10 +686,17 @@ class Parser {
         maxDays = Math.max(maxDays, MONTH_MAX_DAYS[mo - 1] as number);
       }
     }
-    const starts = daySel.node.spans.map((s) => s.start);
-    // Stryker disable next-line ConditionalExpression,LogicalOperator,ArrowFunction,MethodExpression,EqualityOperator: equivalent — proceeding with a null or negative start gives Math.min a value ≤ 0, and minDay ≤ 0 never exceeds maxDays: quiet either way.
-    if (starts.some((v) => v === null || v < 0)) return;
-    const minDay = Math.min(...(starts as number[]));
+    let minDay: number;
+    if (daySel.node.stride) {
+      // a stride selects nothing below its anchor, and the start is non-negative (spec §3) —
+      // D30:*/2 M2 is as dead as D30 M2 (spec §9.1)
+      minDay = daySel.node.stride.start;
+    } else {
+      const starts = daySel.node.spans.map((s) => s.start);
+      // Stryker disable next-line ConditionalExpression,LogicalOperator,ArrowFunction,MethodExpression,EqualityOperator: equivalent — proceeding with a null or negative start gives Math.min a value ≤ 0, and minDay ≤ 0 never exceeds maxDays: quiet either way.
+      if (starts.some((v) => v === null || v < 0)) return;
+      minDay = Math.min(...(starts as number[]));
+    }
     if (minDay > maxDays) {
       this.warnings.push({
         code: 'unsatisfiable',
