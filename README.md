@@ -24,7 +24,7 @@ D-7:* Y*                 last 7 days of every year
 M!7                      every month except July
 ```
 
-A DTRExp denotes a — possibly infinite — set of time intervals. You don't expand it into dates; you ask it questions: *does it cover this instant?* *What does it cover between these two dates?* *When does it next apply?* That makes it the right shape for storing **"when does this apply?" as data** — permission windows, price rules, maintenance schedules, availability — in a database column, an ACL grant, or a config value.
+A DTRExp denotes a possibly infinite set of time intervals. You don't expand it into dates; you ask it questions: *does it cover this instant?* *What does it cover between these two dates?* *When does it next apply?* That makes it the right shape for storing **"when does this apply?" as data**; permission windows, price rules, maintenance schedules, availability — in a database column, an ACL grant, or a config value.
 
 ## Install
 
@@ -61,7 +61,7 @@ parse('D25 M12').toRRule();
 ```
 
 > [!IMPORTANT]
-> Parse **once** (at write/config time), evaluate **many** — `DTRExp` instances are immutable, and `covers()` performs a single calendar-field extraction followed by integer comparisons. No occurrence iteration, ever.
+> Parse **once** (at write/config time), evaluate **many**; `DTRExp` instances are immutable, and `covers()` performs a single calendar-field extraction followed by integer comparisons. No occurrence iteration, ever.
 
 ## API
 
@@ -110,7 +110,7 @@ Components in one expression **intersect**; `T0900:1800 E1:5 M!8` reads naturall
 
 ## Quality
 
-- **Conformance-first:** the test suite is driven by the shared [`vectors.json`](https://github.com/DTRExp/dtrexp/blob/main/vectors.json) from the spec repo — every coverage, rejection and warning vector, including the calendar traps (Feb 29 in 2000/2024/**2100**, `W53` existence, DST gap/overlap in `Europe/Berlin`, constrain arithmetic on month-end anchors).
+- **Conformance-first:** the test suite is driven by the shared [`vectors.json`](https://github.com/DTRExp/dtrexp/blob/main/vectors.json) from the spec repo — every coverage, rejection, warning and quiet vector, including the calendar traps (Feb 29 in 2000/2024/**2100**, `W53` existence, DST gap/overlap in `Europe/Berlin`, constrain arithmetic on month-end anchors). See [VECTORS.md](https://github.com/DTRExp/dtrexp/blob/main/VECTORS.md) for how the suite works.
 - **100% coverage** on all four metrics (lines, statements, functions, branches), enforced as hard thresholds in CI.
 - **100% mutation score** ([Stryker](https://stryker-mutator.io/), `break: 100`) — inclusivity mutants (`<` vs `<=`) are exactly the class of bug a date-range library must not ship, and line coverage alone can't catch them.
 - **CI matrix** on Node 22 / 24 / 26, gate ladder `typecheck → lint → build → cover` plus a dedicated mutation job.
