@@ -39,18 +39,18 @@ Requires Node.js ≥ 22. Zero runtime dependencies.
 ```ts
 import { parse } from 'dtrexp';
 
-const businessHours = parse('T0900:1800 E1:5');
+const dtr = parse('T0900:1800 E1:5');
 
 // coverage — O(#components), built for per-request hot paths
-businessHours.covers(new Date(), { tz: 'Europe/Berlin' });
+dtr.covers(new Date(), { tz: 'Europe/Berlin' });
 // → true (weekday, 09:00–18:00 Berlin local time)
 
 // enumeration on demand — a finite window is always a finite list
-businessHours.intersect('2026-07-06T00:00:00Z', '2026-07-13T00:00:00Z');
+dtr.intersect('2026-07-06T00:00:00Z', '2026-07-13T00:00:00Z');
 // → 5 intervals, one per business day
 
 // "when does it next apply?"
-businessHours.next('2026-07-11T10:00:00Z');
+dtr.next('2026-07-11T10:00:00Z');
 // → { start: 2026-07-13T09:00:00Z, end: 2026-07-13T18:00:00Z }
 
 parse('E7#-1 M4').describe();
@@ -82,13 +82,13 @@ parse('D25 M12').toRRule();
 | `describe(locale?)` | Human-readable English rendering (`'E7#-1 M4'` → *"the last Sunday in April"*). v1 supports `'en'`; the parameter is reserved. |
 | `toRRule()` | RFC 5545 RRULE (+ `DTSTART` line when anchored) for the losslessly-mappable subset, else `null`. Constrained cadences emit RFC 7529 `SKIP=BACKWARD`. |
 | `toString()` | Canonical normalized form (redundant components dropped, canonical order, wraps re-fused). |
-| `warnings` | The spec §9.1 warnings of the parsed expression — same content as `validate().warnings`, so parsing directly doesn't lose them. |
+| `warnings` | The spec [§9.1](https://github.com/DTRExp/dtrexp/blob/main/spec.md#91-the-existence-rule) warnings of the parsed expression — same content as `validate().warnings`, so parsing directly doesn't lose them. |
 | `source` | The original expression, verbatim. |
 
 ### Inputs & options
 
 - **Instants** (`DateInput`): `Date`, epoch milliseconds, ISO 8601 string, or any Temporal-like object exposing `epochMilliseconds` — no Temporal dependency.
-- **`opts.tz`**: IANA time zone for evaluation, default `'UTC'`. The zone is always an **evaluation parameter**, never part of the expression — `T0900:1800` means local business hours wherever you evaluate it. DST is handled per spec §9.3: spring-forward gap times cover nothing; repeated fall-back times are covered on both passes.
+- **`opts.tz`**: IANA time zone for evaluation, default `'UTC'`. The zone is always an **evaluation parameter**, never part of the expression — `T0900:1800` means local business hours wherever you evaluate it. DST is handled per [spec §9.3](https://github.com/DTRExp/dtrexp/blob/main/spec.md#93-dst-and-local-time): spring-forward gap times cover nothing; repeated fall-back times are covered on both passes.
 
 ## Expression syntax (spec draft 2.8)
 
@@ -119,6 +119,7 @@ Components in one expression **intersect**; `T0900:1800 E1:5 M!8` reads naturall
 ## Related projects
 
 - [**dtrexp** (spec)](https://github.com/DTRExp/dtrexp) — the DTRExp specification (grammar, semantics, conformance vectors) this package implements.
+- [**dtrexp-py**](https://github.com/DTRExp/dtrexp-py) · [**dtrexp-go**](https://github.com/DTRExp/dtrexp-go) · [**dtrexp-swift**](https://github.com/DTRExp/dtrexp-swift) · [**dtrexp-rs**](https://github.com/DTRExp/dtrexp-rs) · [**dtrexp-java**](https://github.com/DTRExp/dtrexp-java) — the ports; same core interface.
 
 ## License
 

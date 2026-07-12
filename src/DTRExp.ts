@@ -15,7 +15,7 @@ import type {
 } from './types/index.js';
 
 /**
- *  A parsed, immutable DTRExp expression. Construct via {@link parse}; parse once
+ *  A parsed, immutable DTRExp. Construct via {@link parse}; parse once
  *  at write-time, evaluate per-request — `covers()` is O(#components).
  */
 export class DTRExp {
@@ -109,7 +109,7 @@ export class DTRExp {
 }
 
 /**
- *  Parses a DTRExp expression. The only way to construct a {@link DTRExp}.
+ *  Parses a DTRExp. The only way to construct a {@link DTRExp}.
  *  Throws {@link DTRExpSyntaxError} with a position and stable `code` on invalid input.
  *
  *  @example

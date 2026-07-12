@@ -1,4 +1,4 @@
-/** Thrown by `parse()` for a malformed or statically invalid DTRExp expression. */
+/** Thrown by `parse()` for a malformed or statically invalid DTRExp. */
 export class DTRExpSyntaxError extends Error {
   /** Stable machine-readable error code (kebab-case). */
   readonly code: string;
