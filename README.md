@@ -70,25 +70,25 @@ parse('D25 M12').toRRule();
 | Function | Description |
 | --- | --- |
 | `parse(expression)` | Parses a DTRExp string into an immutable `DTRExp`. Throws `DTRExpSyntaxError` with a stable `code` and character `position` on invalid input. The only way to construct a `DTRExp`. |
-| `validate(expression)` | Non-throwing variant. Returns `{ valid, errors, warnings }` — warnings include the spec's *unsatisfiability lint* (`D30 M2` parses but can never match). |
+| `validate(expression)` | Non-throwing variant. Returns `{ valid, errors, warnings }`; warnings include the spec's *unsatisfiability lint* (`D30 M2` parses but can never match). |
 
 ### `DTRExp` instance
 
 | Member | Description |
 | --- | --- |
 | `covers(instant, opts?)` | Whether the expression covers the instant. O(#components) integer tests after one field extraction. |
-| `intersect(start, end, opts?)` | Covered intervals clipped to `[start, end)` — a finite, sorted, merged list of half-open `{ start: Date, end: Date }` intervals. |
+| `intersect(start, end, opts?)` | Covered intervals clipped to `[start, end)`: a finite, sorted, merged list of half-open `{ start: Date, end: Date }` intervals. |
 | `next(after, opts?)` | The first **maximal** covered interval starting strictly after `after` (coverage containing `after` is skipped). `null` when nothing starts before the year-9999 horizon. |
 | `describe(locale?)` | Human-readable English rendering (`'E7#-1 M4'` → *"the last Sunday in April"*). v1 supports `'en'`; the parameter is reserved. |
 | `toRRule()` | RFC 5545 RRULE (+ `DTSTART` line when anchored) for the losslessly-mappable subset, else `null`. Constrained cadences emit RFC 7529 `SKIP=BACKWARD`. |
 | `toString()` | Canonical normalized form (redundant components dropped, canonical order, wraps re-fused). |
-| `warnings` | The spec [§9.1](https://github.com/DTRExp/dtrexp/blob/main/spec.md#91-the-existence-rule) warnings of the parsed expression — same content as `validate().warnings`, so parsing directly doesn't lose them. |
+| `warnings` | The spec [§9.1](https://github.com/DTRExp/dtrexp/blob/main/spec.md#91-the-existence-rule) warnings of the parsed expression: same content as `validate().warnings`, so parsing directly doesn't lose them. |
 | `source` | The original expression, verbatim. |
 
 ### Inputs & options
 
-- **Instants** (`DateInput`): `Date`, epoch milliseconds, ISO 8601 string, or any Temporal-like object exposing `epochMilliseconds` — no Temporal dependency.
-- **`opts.tz`**: IANA time zone for evaluation, default `'UTC'`. The zone is always an **evaluation parameter**, never part of the expression — `T0900:1800` means local business hours wherever you evaluate it. DST is handled per [spec §9.3](https://github.com/DTRExp/dtrexp/blob/main/spec.md#93-dst-and-local-time): spring-forward gap times cover nothing; repeated fall-back times are covered on both passes.
+- **Instants** (`DateInput`): `Date`, epoch milliseconds, ISO 8601 string, or any Temporal-like object exposing `epochMilliseconds` (no Temporal dependency).
+- **`opts.tz`**: IANA time zone for evaluation, default `'UTC'`. The zone is always an **evaluation parameter**, never part of the expression; `T0900:1800` means local business hours wherever you evaluate it. DST is handled per [spec §9.3](https://github.com/DTRExp/dtrexp/blob/main/spec.md#93-dst-and-local-time): spring-forward gap times cover nothing; repeated fall-back times are covered on both passes.
 
 ## Expression syntax (spec draft 2.8)
 
@@ -97,11 +97,11 @@ The full grammar and semantics live in the **[specification](https://github.com/
 | Component | Example | Meaning |
 | --- | --- | --- |
 | Selectors | `M3:7`, `E1:5`, `D1,15`, `W53`, `Q2`, `Y2018` | inclusive values/ranges/lists per calendar unit |
-| Negative index | `D-1`, `D-7:*` | from the end of the actual parent (last day — leap-safe) |
+| Negative index | `D-1`, `D-7:*` | from the end of the actual parent (last day, leap-safe) |
 | Exclusion | `M!5,7:9` | domain minus the set |
 | Ordinal | `E7#2`, `E7#-1` | nth / nth-from-last weekday in scope |
 | Time of day | `T0900:1200,1300:1800`, `T2200:0600` | half-open clock ranges; midnight wrap stays within the day |
-| Stride | `H0/4`, `M1/5/2`, `Y2020:2040/3` | calendar-locked recurrence — `/interval[/duration]` |
+| Stride | `H0/4`, `M1/5/2`, `Y2020:2040/3` | calendar-locked recurrence: `/interval[/duration]` |
 | Cadence | `20200106/10D/3D`, `20180301/14M` | anchor-based recurrence that drifts across the calendar |
 | Bounds | `20150101:*`, `*:20291231`, `20180120` | absolute window / single day |
 | Union | `E5#1 \| E5#3` | either expression |
@@ -110,16 +110,16 @@ Components in one expression **intersect**; `T0900:1800 E1:5 M!8` reads naturall
 
 ## Quality
 
-- **Conformance-first:** the test suite is driven by the shared [`vectors.json`](https://github.com/DTRExp/dtrexp/blob/main/vectors.json) from the spec repo — every coverage, rejection, warning and quiet vector, including the calendar traps (Feb 29 in 2000/2024/**2100**, `W53` existence, DST gap/overlap in `Europe/Berlin`, constrain arithmetic on month-end anchors). See [VECTORS.md](https://github.com/DTRExp/dtrexp/blob/main/VECTORS.md) for how the suite works.
+- **Conformance-first:** the test suite is driven by the shared [`vectors.json`](https://github.com/DTRExp/dtrexp/blob/main/vectors.json) from the spec repo: every coverage, rejection, warning and quiet vector, including the calendar traps (Feb 29 in 2000/2024/**2100**, `W53` existence, DST gap/overlap in `Europe/Berlin`, constrain arithmetic on month-end anchors). See [VECTORS.md](https://github.com/DTRExp/dtrexp/blob/main/VECTORS.md) for how the suite works.
 - **100% coverage** on all four metrics (lines, statements, functions, branches), enforced as hard thresholds in CI.
-- **100% mutation score** ([Stryker](https://stryker-mutator.io/), `break: 100`) — inclusivity mutants (`<` vs `<=`) are exactly the class of bug a date-range library must not ship, and line coverage alone can't catch them.
+- **100% mutation score** ([Stryker](https://stryker-mutator.io/), `break: 100`): inclusivity mutants (`<` vs `<=`) are exactly the class of bug a date-range library must not ship, and line coverage alone can't catch them.
 - **CI matrix** on Node 22 / 24 / 26, gate ladder `typecheck → lint → build → cover` plus a dedicated mutation job.
-- Pure integer calendar math (Hinnant civil-date algorithms, ISO week arithmetic) — the only platform dependency is `Intl` for IANA zone offsets, with a fast path for UTC.
+- Pure integer calendar math (Hinnant civil-date algorithms, ISO week arithmetic). The only platform dependency is `Intl` for IANA zone offsets, with a fast path for UTC.
 
 ## Related projects
 
-- [**dtrexp** (spec)](https://github.com/DTRExp/dtrexp) — the DTRExp specification (grammar, semantics, conformance vectors) this package implements.
-- [**dtrexp-py**](https://github.com/DTRExp/dtrexp-py) · [**dtrexp-go**](https://github.com/DTRExp/dtrexp-go) · [**dtrexp-swift**](https://github.com/DTRExp/dtrexp-swift) · [**dtrexp-rs**](https://github.com/DTRExp/dtrexp-rs) · [**dtrexp-java**](https://github.com/DTRExp/dtrexp-java) — the ports; same core interface.
+- [**dtrexp** (spec)](https://github.com/DTRExp/dtrexp): the DTRExp specification (grammar, semantics, conformance vectors) this package implements.
+- [**dtrexp-py**](https://github.com/DTRExp/dtrexp-py) · [**dtrexp-go**](https://github.com/DTRExp/dtrexp-go) · [**dtrexp-swift**](https://github.com/DTRExp/dtrexp-swift) · [**dtrexp-rs**](https://github.com/DTRExp/dtrexp-rs) · [**dtrexp-java**](https://github.com/DTRExp/dtrexp-java): the ports; same core interface.
 
 ## License
 
