@@ -34,7 +34,7 @@ npm i dtrexp
 
 Requires Node.js ≥ 22. Zero runtime dependencies.
 
-## Quick start
+## Quick Start
 
 ```ts
 import { parse } from 'dtrexp';
@@ -72,7 +72,7 @@ parse('D25 M12').toRRule();
 | `parse(expression)` | Parses a DTRExp string into an immutable `DTRExp`. Throws `DTRExpSyntaxError` with a stable `code` and character `position` on invalid input. The only way to construct a `DTRExp`. |
 | `validate(expression)` | Non-throwing variant. Returns `{ valid, errors, warnings }`; warnings include the spec's *unsatisfiability lint* (`D30 M2` parses but can never match). |
 
-### `DTRExp` instance
+### `DTRExp` Instance
 
 | Member | Description |
 | --- | --- |
@@ -85,12 +85,12 @@ parse('D25 M12').toRRule();
 | `warnings` | The spec [§9.1](https://github.com/DTRExp/dtrexp/blob/main/spec.md#91-the-existence-rule) warnings of the parsed expression: same content as `validate().warnings`, so parsing directly doesn't lose them. |
 | `source` | The original expression, verbatim. |
 
-### Inputs & options
+### Inputs & Options
 
 - **Instants** (`DateInput`): `Date`, epoch milliseconds, ISO 8601 string, or any Temporal-like object exposing `epochMilliseconds` (no Temporal dependency).
 - **`opts.tz`**: IANA time zone for evaluation, default `'UTC'`. The zone is always an **evaluation parameter**, never part of the expression; `T0900:1800` means local business hours wherever you evaluate it. DST is handled per [spec §9.3](https://github.com/DTRExp/dtrexp/blob/main/spec.md#93-dst-and-local-time): spring-forward gap times cover nothing; repeated fall-back times are covered on both passes.
 
-## Expression syntax (spec draft 2.8)
+## Expression Syntax (spec draft 2.8)
 
 The full grammar and semantics live in the **[specification](https://github.com/DTRExp/dtrexp/blob/main/spec.md)**; the essentials:
 
@@ -116,7 +116,7 @@ Components in one expression **intersect**; `T0900:1800 E1:5 M!8` reads naturall
 - **CI matrix** on Node 22 / 24 / 26, gate ladder `typecheck → lint → build → cover` plus a dedicated mutation job.
 - Pure integer calendar math (Hinnant civil-date algorithms, ISO week arithmetic). The only platform dependency is `Intl` for IANA zone offsets, with a fast path for UTC.
 
-## Related projects
+## Related Projects
 
 - [**dtrexp** (spec)](https://github.com/DTRExp/dtrexp): the DTRExp specification (grammar, semantics, conformance vectors) this package implements.
 - [**dtrexp-py**](https://github.com/DTRExp/dtrexp-py) · [**dtrexp-go**](https://github.com/DTRExp/dtrexp-go) · [**dtrexp-swift**](https://github.com/DTRExp/dtrexp-swift) · [**dtrexp-rs**](https://github.com/DTRExp/dtrexp-rs) · [**dtrexp-java**](https://github.com/DTRExp/dtrexp-java): the ports; same core interface.
