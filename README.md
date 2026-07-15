@@ -122,6 +122,7 @@ Components in one expression **intersect**; `T0900:1800 E1:5 M!8` reads naturall
 
 - [**dtrexp** (spec)](https://github.com/DTRExp/dtrexp): the DTRExp specification (grammar, semantics, conformance vectors) this package implements.
 - [**dtrexp-py**](https://github.com/DTRExp/dtrexp-py) · [**dtrexp-go**](https://github.com/DTRExp/dtrexp-go) · [**dtrexp-swift**](https://github.com/DTRExp/dtrexp-swift) · [**dtrexp-rs**](https://github.com/DTRExp/dtrexp-rs) · [**dtrexp-java**](https://github.com/DTRExp/dtrexp-java): the ports; same core interface.
+- [**dtrexp-wasm**](https://github.com/DTRExp/dtrexp-wasm): the Rust core compiled to WebAssembly for JS hosts.
 
 ## License
 
