@@ -1,3 +1,5 @@
+<p align="center"><img src="./.github/logo.svg" width="200" alt="dtrexp-js" /></p>
+
 # dtrexp-js
 
 <p align="center">
