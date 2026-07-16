@@ -33,7 +33,7 @@
     "prepublishOnly": "npm run build"
   },
   "repository": "DTRExp/dtrexp-js",
-  "homepage": "https://github.com/DTRExp/dtrexp-js#readme",
+  "homepage": "https://dtrexp.org",
   "bugs": {
     "url": "https://github.com/DTRExp/dtrexp-js/issues"
   },
