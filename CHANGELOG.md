@@ -2,7 +2,13 @@
 
 All notable changes to this project will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 1.0.1 — 2026-07-16
+
+### Changed
+
+- Node.js floor lowered to `>=20.0.0` (was `>=22.0.0`). The library uses no API newer than Node 20 — no Node builtins at all, `Intl.DateTimeFormat` for zones, ES2022 output; the full test suite (1065 tests, conformance vectors included) and the built `lib/` are verified on Node 20, and the CI matrix now includes it.
+
+## 1.0.0 — 2026-07-15
 
 ### Added
 

@@ -1,6 +1,6 @@
 {
   "name": "dtrexp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Reference TypeScript implementation of DTRExp — compact date-time range & recurrence expressions, evaluated by coverage.",
   "type": "module",
   "main": "./lib/index.js",
@@ -19,7 +19,7 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=20.0.0"
   },
   "scripts": {
     "lint": "biome check src test",
