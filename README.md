@@ -34,7 +34,7 @@ A DTRExp denotes a possibly infinite set of time intervals. You don't expand it 
 npm i dtrexp
 ```
 
-Requires Node.js ≥ 22. Zero runtime dependencies.
+Requires Node.js ≥ 20. Zero runtime dependencies.
 
 ## Quick Start
 
@@ -115,7 +115,7 @@ Components in one expression **intersect**; `T0900:1800 E1:5 M!8` reads naturall
 - **Conformance-first:** the test suite is driven by the shared [`vectors.json`](https://github.com/DTRExp/dtrexp/blob/main/vectors.json) from the spec repo: every coverage, rejection, warning and quiet vector, including the calendar traps (Feb 29 in 2000/2024/**2100**, `W53` existence, DST gap/overlap in `Europe/Berlin`, constrain arithmetic on month-end anchors). See [VECTORS.md](https://github.com/DTRExp/dtrexp/blob/main/VECTORS.md) for how the suite works.
 - **100% coverage** on all four metrics (lines, statements, functions, branches), enforced as hard thresholds in CI.
 - **100% mutation score** ([Stryker](https://stryker-mutator.io/), `break: 100`): inclusivity mutants (`<` vs `<=`) are exactly the class of bug a date-range library must not ship, and line coverage alone can't catch them.
-- **CI matrix** on Node 22 / 24 / 26, gate ladder `typecheck → lint → build → cover` plus a dedicated mutation job.
+- **CI matrix** on Node 20 / 22 / 24 / 26, gate ladder `typecheck → lint → build → cover` plus a dedicated mutation job.
 - Pure integer calendar math (Hinnant civil-date algorithms, ISO week arithmetic). The only platform dependency is `Intl` for IANA zone offsets, with a fast path for UTC.
 
 ## Related Projects
