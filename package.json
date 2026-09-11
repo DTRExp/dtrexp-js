@@ -1,6 +1,6 @@
 {
   "name": "dtrexp",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Reference TypeScript implementation of DTRExp — compact date-time range & recurrence expressions, evaluated by coverage.",
   "type": "module",
   "main": "./lib/index.js",

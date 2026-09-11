@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.0.2 — 2026-09-11
+
+### Fixed
+
+- Fixed an issue where `next()` and `intersect()` disagreed with `covers()` on DST transition days in non-UTC zones. The stepper scanned each local day as a fixed 24-hour block and mapped its edges back one at a time; so a clock time inside a spring-forward gap produced an interval `covers()` denies (`T0230` in `Europe/Berlin` on 2026-03-29), the second pass of a fall-back hour was dropped, and a range straddling a transition started or ended off by the shift. Each local day is now mapped onto absolute time through its zone segments: gap times map to nothing, repeated times map to both passes, and a day swallowed whole by a transition (`Pacific/Apia` 2011-12-30) maps to nothing at all. The regression suite adds 26 cases across Berlin, Santiago, Lord Howe and Apia, plus a minute-sampled `covers()` cross-check of every `intersect()` result and every `next()` walk around each transition.
+
 ## 1.0.1 — 2026-07-16
 
 ### Changed

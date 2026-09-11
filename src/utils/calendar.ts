@@ -252,22 +252,72 @@ export function epochFromLocal(
   return later;
 }
 
-/** Absolute instant of a local pseudo-epoch value (millisecond precision). */
-export function epochFromPseudo(tz: string, pseudo: number): number {
-  const dayNum = Math.floor(pseudo / MS_PER_DAY);
-  const msOfDay = pseudo - dayNum * MS_PER_DAY;
-  const { year, month, day } = civilFromDays(dayNum);
-  const ms = msOfDay % 1000;
-  const seconds = Math.floor(msOfDay / 1000);
-  return (
-    epochFromLocal(
-      tz,
-      year,
-      month,
-      day,
-      Math.floor(seconds / 3600),
-      Math.floor(seconds / 60) % 60,
-      seconds % 60
-    ) + ms
-  );
+export interface ILocalDay {
+  /** Absolute `[lo, hi)` ranges carrying the local pseudo-epoch range `[lo, hi)`, sorted. */
+  map: (lo: number, hi: number) => { lo: number; hi: number }[];
+  /** An instant at or before the day's first; exact except on a transition day, where it may run early by the shift. */
+  start: number;
+  /** The first absolute instant of the next local day (exact). */
+  end: number;
+}
+
+/**
+ *  How the local calendar day `day` (days since 1970-01-01) maps onto absolute
+ *  time in `tz`.
+ *
+ *  The zone's offset is probed a day either side of the local day; when the two
+ *  differ, the transition between them is located by bisection and the day is
+ *  two segments. Local times inside a spring-forward gap belong to neither
+ *  segment and map to nothing; times inside a fall-back overlap belong to both
+ *  and map twice — the same instants `covers()` accepts (spec §9.3). A day
+ *  swallowed whole by a transition (Pacific/Apia 2011-12-30) maps every range
+ *  to nothing and has `start === end`, the transition instant. Assumes at most
+ *  one transition per 72-hour neighbourhood, which holds for every IANA zone.
+ */
+export function localDay(tz: string, day: number): ILocalDay {
+  const p0 = day * MS_PER_DAY;
+  const p1 = p0 + MS_PER_DAY;
+  // Stryker disable next-line all: 'UTC' fast path is a pure optimization — the probes below find offA === offB === 0
+  if (tz === 'UTC') return { map: (lo, hi) => [{ lo, hi }], start: p0, end: p1 };
+  const offsetAt = (t: number): number => fieldsFromInstant(t, tz).pseudo - t;
+  // A zone offset never exceeds ±24h, so these bracket every offset in effect on the day.
+  let a = p0 - MS_PER_DAY;
+  let b = p0 + 2 * MS_PER_DAY;
+  const offA = offsetAt(a);
+  const offB = offsetAt(b);
+  // Stryker disable next-line ConditionalExpression,BlockStatement: equivalent — with equal offsets the bisection below converges on the far probe, so the second segment starts past the day and the general mapper returns the same single range; the branch only saves the probes.
+  if (offA === offB) {
+    return {
+      map: (lo, hi) => [{ lo: lo - offA, hi: hi - offA }],
+      start: p0 - offA,
+      end: p1 - offA
+    };
+  }
+  // first instant carrying offB
+  while (b - a > 1) {
+    const mid = Math.floor((a + b) / 2);
+    if (offsetAt(mid) === offA) a = mid;
+    else b = mid;
+  }
+  const endA = b + offA; // local times before this belong to the first segment
+  const startB = b + offB; // local times from this on belong to the second
+  const map = (lo: number, hi: number): { lo: number; hi: number }[] => {
+    // Stryker disable next-line ArrayDeclaration: equivalent — the consumer sortMerges every mapped list, and its hi > lo filter drops non-range garbage.
+    const out: { lo: number; hi: number }[] = [];
+    const hiA = Math.min(hi, endA);
+    // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — a part that is empty or reversed (hiA <= lo) is dropped by the consumer's hi > lo filter (sortMerge).
+    if (hiA > lo) out.push({ lo: lo - offA, hi: hiA - offA });
+    const loB = Math.max(lo, startB);
+    // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — same filter: an empty or reversed second part never survives sortMerge.
+    if (hi > loB) out.push({ lo: loB - offB, hi: hi - offB });
+    return out;
+  };
+  // A lower bound is enough for `start` (it only opens a scan window), so the earlier of the two readings serves.
+  // Stryker disable next-line ArithmeticOperator: equivalent — flipping the sign on the reading that is not the minimum leaves the minimum in place, and an even earlier bound only lengthens a scan.
+  const start = Math.min(p0 - offA, p0 - offB);
+  // `end` is exact: the earliest instant whose wall clock reads the next day's midnight — the second
+  // reading when the overlap reaches it, the transition itself when a gap swallows it, else the first.
+  // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — the `false` branch yields `b` or the first reading, both at or before the true end, and an early `end` only delays the stepper's day-end return by one day (the next day's coverage decides the same way); at p1 === endA the first reading IS the transition instant (endA - offA = b), so `>=` picks the same value.
+  const end = p1 > startB ? p1 - offB : p1 > endA ? b : p1 - offA;
+  return { map, start, end };
 }
