@@ -252,12 +252,115 @@ export function epochFromLocal(
   return later;
 }
 
+/** Zone offset at an instant: local pseudo-epoch minus the instant (ms; east of UTC is positive). */
+function rawOffset(tz: string, t: number): number {
+  return fieldsFromInstant(t, tz).pseudo - t;
+}
+
+const GRID = 7 * MS_PER_DAY;
+/** Cells kept per zone before the index is cleared; 65,536 cells is ~1,250 years. */
+export const ZONE_CELL_CAP = 65_536;
+
+interface ICell {
+  /** Offset at the cell's start. */
+  off: number;
+  /** Offset at the next cell's start. */
+  next: number;
+  /** The transition instant inside the cell; `NaN` when `off === next`. */
+  at: number;
+}
+
+/**
+ *  Offsets and transitions of one IANA zone, discovered lazily on a 7-day grid:
+ *  one `Intl` probe per grid point, one bisection per cell that contains a
+ *  transition. A day scan then costs no zone lookups at all once its week is
+ *  indexed. Assumes at most one transition per 7-day cell, which holds for
+ *  every IANA zone.
+ */
+export class ZoneIndex {
+  private readonly cells = new Map<number, ICell>();
+  private readonly probes = new Map<number, number>();
+  private readonly tz: string;
+  private readonly cap: number;
+
+  constructor(tz: string, cap = ZONE_CELL_CAP) {
+    this.tz = tz;
+    this.cap = cap;
+  }
+
+  /** Zone offset in effect at `t`. */
+  offsetAt(t: number): number {
+    const c = this.cell(Math.floor(t / GRID));
+    return t < c.at ? c.off : c.next;
+  }
+
+  /** The first transition instant in `(a, b]`, or `NaN` when the offset holds throughout. */
+  transitionIn(a: number, b: number): number {
+    const last = Math.floor(b / GRID);
+    for (let k = Math.floor(a / GRID); k <= last; k++) {
+      const c = this.cell(k);
+      if (c.at > a && c.at <= b) return c.at;
+    }
+    return Number.NaN;
+  }
+
+  private probe(k: number): number {
+    let off = this.probes.get(k);
+    // Stryker disable next-line ConditionalExpression: the probe cache is a pure optimization — re-probing yields the same offset
+    if (off === undefined) {
+      off = rawOffset(this.tz, k * GRID);
+      this.probes.set(k, off);
+    }
+    return off;
+  }
+
+  private cell(k: number): ICell {
+    let c = this.cells.get(k);
+    if (c) return c;
+    // Stryker disable next-line ConditionalExpression,EqualityOperator,BlockStatement: a memory bound only — clearing early, late or never leaves every answer unchanged (cells are recomputed on demand)
+    if (this.cells.size >= this.cap) {
+      this.cells.clear();
+      this.probes.clear();
+    }
+    const off = this.probe(k);
+    const next = this.probe(k + 1);
+    let at = Number.NaN;
+    if (off !== next) {
+      // first instant carrying `next`
+      let a = k * GRID;
+      let b = a + GRID;
+      while (b - a > 1) {
+        const mid = Math.floor((a + b) / 2);
+        if (rawOffset(this.tz, mid) === off) a = mid;
+        else b = mid;
+      }
+      at = b;
+    }
+    c = { off, next, at };
+    this.cells.set(k, c);
+    return c;
+  }
+}
+
+const zoneIndexes = new Map<string, ZoneIndex>();
+
+/** The shared index of a zone. */
+export function zoneIndex(tz: string): ZoneIndex {
+  let z = zoneIndexes.get(tz);
+  // Stryker disable next-line ConditionalExpression: the cache is a pure optimization — a fresh index answers identically
+  if (!z) {
+    z = new ZoneIndex(tz);
+    zoneIndexes.set(tz, z);
+  }
+  return z;
+}
+
 export interface ILocalDay {
   /** Absolute `[lo, hi)` ranges carrying the local pseudo-epoch range `[lo, hi)`, sorted. */
   map: (lo: number, hi: number) => { lo: number; hi: number }[];
-  /** An instant at or before the day's first; exact except on a transition day, where it may run early by the shift. */
+  /** The first absolute instant of the local day. */
   start: number;
-  /** The first absolute instant of the next local day (exact). */
+  /** The first absolute instant of the next local day. */
   end: number;
 }
 
@@ -265,27 +368,25 @@ export interface ILocalDay {
  *  How the local calendar day `day` (days since 1970-01-01) maps onto absolute
  *  time in `tz`.
  *
- *  The zone's offset is probed a day either side of the local day; when the two
- *  differ, the transition between them is located by bisection and the day is
- *  two segments. Local times inside a spring-forward gap belong to neither
- *  segment and map to nothing; times inside a fall-back overlap belong to both
- *  and map twice — the same instants `covers()` accepts (spec §9.3). A day
- *  swallowed whole by a transition (Pacific/Apia 2011-12-30) maps every range
- *  to nothing and has `start === end`, the transition instant. Assumes at most
- *  one transition per 72-hour neighbourhood, which holds for every IANA zone.
+ *  The zone's offset is read a day either side of the local day; when the two
+ *  differ, the transition between them splits the day into two segments. Local
+ *  times inside a spring-forward gap belong to neither segment and map to
+ *  nothing; times inside a fall-back overlap belong to both and map twice — the
+ *  same instants `covers()` accepts (spec §9.3). A day swallowed whole by a
+ *  transition (Pacific/Apia 2011-12-30) maps every range to nothing and has
+ *  `start === end`, the transition instant.
  */
 export function localDay(tz: string, day: number): ILocalDay {
   const p0 = day * MS_PER_DAY;
   const p1 = p0 + MS_PER_DAY;
-  // Stryker disable next-line all: 'UTC' fast path is a pure optimization — the probes below find offA === offB === 0
+  // Stryker disable next-line all: 'UTC' fast path is a pure optimization — the index finds offA === offB === 0
   if (tz === 'UTC') return { map: (lo, hi) => [{ lo, hi }], start: p0, end: p1 };
-  const offsetAt = (t: number): number => fieldsFromInstant(t, tz).pseudo - t;
+  const zone = zoneIndex(tz);
   // A zone offset never exceeds ±24h, so these bracket every offset in effect on the day.
-  let a = p0 - MS_PER_DAY;
-  let b = p0 + 2 * MS_PER_DAY;
-  const offA = offsetAt(a);
-  const offB = offsetAt(b);
-  // Stryker disable next-line ConditionalExpression,BlockStatement: equivalent — with equal offsets the bisection below converges on the far probe, so the second segment starts past the day and the general mapper returns the same single range; the branch only saves the probes.
+  const a = p0 - MS_PER_DAY;
+  const b = p0 + 2 * MS_PER_DAY;
+  const offA = zone.offsetAt(a);
+  const offB = zone.offsetAt(b);
   if (offA === offB) {
     return {
       map: (lo, hi) => [{ lo: lo - offA, hi: hi - offA }],
@@ -293,14 +394,9 @@ export function localDay(tz: string, day: number): ILocalDay {
       end: p1 - offA
     };
   }
-  // first instant carrying offB
-  while (b - a > 1) {
-    const mid = Math.floor((a + b) / 2);
-    if (offsetAt(mid) === offA) a = mid;
-    else b = mid;
-  }
-  const endA = b + offA; // local times before this belong to the first segment
-  const startB = b + offB; // local times from this on belong to the second
+  const t = zone.transitionIn(a, b);
+  const endA = t + offA; // local times before this belong to the first segment
+  const startB = t + offB; // local times from this on belong to the second
   const map = (lo: number, hi: number): { lo: number; hi: number }[] => {
     // Stryker disable next-line ArrayDeclaration: equivalent — the consumer sortMerges every mapped list, and its hi > lo filter drops non-range garbage.
     const out: { lo: number; hi: number }[] = [];
@@ -312,12 +408,14 @@ export function localDay(tz: string, day: number): ILocalDay {
     if (hi > loB) out.push({ lo: loB - offB, hi: hi - offB });
     return out;
   };
-  // A lower bound is enough for `start` (it only opens a scan window), so the earlier of the two readings serves.
-  // Stryker disable next-line ArithmeticOperator: equivalent — flipping the sign on the reading that is not the minimum leaves the minimum in place, and an even earlier bound only lengthens a scan.
-  const start = Math.min(p0 - offA, p0 - offB);
-  // `end` is exact: the earliest instant whose wall clock reads the next day's midnight — the second
-  // reading when the overlap reaches it, the transition itself when a gap swallows it, else the first.
-  // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — the `false` branch yields `b` or the first reading, both at or before the true end, and an early `end` only delays the stepper's day-end return by one day (the next day's coverage decides the same way); at p1 === endA the first reading IS the transition instant (endA - offA = b), so `>=` picks the same value.
-  const end = p1 > startB ? p1 - offB : p1 > endA ? b : p1 - offA;
+  // The day's first instant: the first reading of local midnight when it exists; else the later
+  // of the transition and the second reading (the transition when a gap swallows midnight, the
+  // second reading when an overlap has already run past it).
+  // Stryker disable next-line EqualityOperator: equivalent — at p0 === endA the `<=` form picks the first reading, which is the transition instant t (endA - offA), at or before the true start; an earlier start only widens the sub-day cadence scan, whose windows are intersected with the day's own ranges.
+  const start = p0 < endA ? p0 - offA : Math.max(t, p0 - offB);
+  // `end` is the earliest instant reading the next day's midnight: the second reading when the
+  // overlap reaches it, the transition when a gap swallows it, else the first reading.
+  // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — the `false` branch yields `t` or the first reading, both at or before the true end, and an early `end` only delays a chain's day-end check by one day (the next day's coverage decides the same way); at p1 === endA or p1 === startB both forms land on t.
+  const end = p1 > startB ? p1 - offB : p1 > endA ? t : p1 - offA;
   return { map, start, end };
 }

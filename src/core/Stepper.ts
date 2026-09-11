@@ -7,7 +7,6 @@ import type {
   ISelector,
   Unit
 } from '../types/index.js';
-import type { ILocalDay } from '../utils/index.js';
 import {
   civilFromDays,
   epochDay,
@@ -28,6 +27,8 @@ import {
 const MS_PER_DAY = 86_400_000;
 /** Scan horizon: coverage is explored through the end of year 9999 (spec Y domain). */
 const HORIZON_PSEUDO = epochDay(10_000, 1, 1) * MS_PER_DAY;
+/** Scan floor: the start of year 1 (the spec's `Y` domain begins there). */
+const FLOOR_PSEUDO = epochDay(1, 1, 1) * MS_PER_DAY;
 
 export interface IRange {
   lo: number;
@@ -116,7 +117,9 @@ function dayRanges(plan: IExprPlan, day: number, f: IFields): IRange[] {
 interface IDayCoverage {
   /** Covered absolute `[lo, hi)` ranges of the day (sorted, merged). */
   ranges: IRange[];
-  /** Absolute end of the local day; `Infinity` when nothing matched the day (so nothing can chain through it). */
+  /** First absolute instant of the local day. */
+  absStart: number;
+  /** First absolute instant of the next local day; equals `absStart` for a day that never happened (Pacific/Apia 2011-12-30). */
   absEnd: number;
 }
 
@@ -125,13 +128,12 @@ function dayCoverage(plans: IExprPlan[], day: number, tz: string): IDayCoverage 
   const civil = civilFromDays(day);
   const f = fieldsFromCivil(civil.year, civil.month, civil.day);
   const dayLo = day * MS_PER_DAY;
-  let local: ILocalDay | null = null;
+  const local = localDay(tz, day);
   let covered: IRange[] = [];
   for (const plan of plans) {
     const ranges = dayRanges(plan, day, f);
-    // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — short-circuit only: mapping an empty list is an empty list, and the zone probes it skips are pure cost.
+    // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — short-circuit only: mapping an empty list is an empty list.
     if (ranges.length === 0) continue;
-    local ??= localDay(tz, day);
     // Stryker disable next-line ArrayDeclaration: equivalent — sortMerge's hi > lo filter drops any non-range garbage seeded here.
     let abs: IRange[] = [];
     for (const r of ranges) abs = abs.concat(local.map(dayLo + r.lo, dayLo + r.hi));
@@ -146,7 +148,7 @@ function dayCoverage(plans: IExprPlan[], day: number, tz: string): IDayCoverage 
     }
     covered = sortMerge(covered.concat(abs));
   }
-  return { ranges: covered, absEnd: local ? local.end : Number.POSITIVE_INFINITY };
+  return { ranges: covered, absStart: local.start, absEnd: local.end };
 }
 
 /**
@@ -230,6 +232,40 @@ export function nextInterval(ir: IDTRExpIR, afterEpoch: number, tz: string): IIn
     if (start !== -1 && end < absEnd) return toInterval({ lo: start, hi: end });
   }
   return start !== -1 ? toInterval({ lo: start, hi: end }) : null;
+}
+
+/**
+ *  The maximal covered interval containing `epoch`, or `null` when the instant
+ *  is not covered. Coverage that reaches the year-1 floor or the year-9999
+ *  horizon is clipped there.
+ */
+export function coveringInterval(ir: IDTRExpIR, epoch: number, tz: string): IInterval | null {
+  const plans = planFor(ir);
+  const day0 = Math.floor(fieldsFromInstant(epoch, tz).pseudo / MS_PER_DAY);
+  const hit = dayCoverage(plans, day0, tz).ranges.find((r) => r.lo <= epoch && epoch < r.hi);
+  if (!hit) return null;
+  let { lo: start, hi: end } = hit;
+  // Forward: a day continues the chain iff its first range starts where the chain ends. Its
+  // ranges all start at or after its own start, which is the previous day's end, so only a
+  // chain that reached that end can continue. A day that never happened is stepped over.
+  for (let day = day0 + 1; day * MS_PER_DAY < HORIZON_PSEUDO; day++) {
+    const { ranges, absStart, absEnd } = dayCoverage(plans, day, tz);
+    const first = ranges[0];
+    if (first) {
+      if (first.lo !== end) break;
+      end = first.hi;
+    } else if (absStart !== absEnd) break;
+  }
+  // Backward, symmetrically.
+  for (let day = day0 - 1; day * MS_PER_DAY >= FLOOR_PSEUDO; day--) {
+    const { ranges, absStart, absEnd } = dayCoverage(plans, day, tz);
+    const last = ranges[ranges.length - 1];
+    if (last) {
+      if (last.hi !== start) break;
+      start = last.lo;
+    } else if (absStart !== absEnd) break;
+  }
+  return toInterval({ lo: start, hi: end });
 }
 
 function toInterval(r: IRange): IInterval {

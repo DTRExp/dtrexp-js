@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.1.0 — 2026-09-11
+
+### Added
+
+- `covering(instant, opts?)`: the maximal covered interval containing an instant, or `null` when it is not covered; `covers(t)` holds iff `covering(t)` is not `null`. The "applies now, until …" half of a display (`next()` skips the interval in progress by design). Chains across days in both directions and is clipped at the year-1 floor and the year-9999 horizon.
+- The spec's Extended (Tier 2) vectors, vendored at `test/vectors-extended.json`, drive `next()`, `covering()` and `intersect()` next to the Core suite; half of them sit on DST transitions. `SPEC_DRAFT` is `2.9`.
+
+### Fixed
+
+- Fixed an issue where `next()` split coverage around a local day that never happened (`Pacific/Apia` skipped 2011-12-30 crossing the date line) when the expression did not name that day: `D29,31 M12` returned the 29th alone, and `next()` from its end then skipped the 31st entirely, since the 31st starts exactly at the transition. The 29th and the 31st are one interval now, as `covers()` has always said. 1.0.2 carries the bug; 1.1.0 supersedes it.
+
+### Changed
+
+- Zone offsets are read through a per-zone index (7-day cells, one `Intl` probe per cell, one bisection per transition) instead of per-day probes. A continuous expression scanned to the horizon in a non-UTC zone takes about 2 s (1.0.2 took 12 s; 1.0.1 was faster and wrong).
+
 ## 1.0.2 — 2026-09-11
 
 ### Fixed

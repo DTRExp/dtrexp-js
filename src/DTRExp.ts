@@ -3,7 +3,7 @@ import { describeIR } from './core/Describe.js';
 import { coversInstant } from './core/Evaluator.js';
 import { parseToIR } from './core/Parser.js';
 import { toRRuleString } from './core/RRule.js';
-import { intersectWindow, nextInterval } from './core/Stepper.js';
+import { coveringInterval, intersectWindow, nextInterval } from './core/Stepper.js';
 import { DTRExpSyntaxError } from './DTRExpSyntaxError.js';
 import type {
   DateInput,
@@ -78,6 +78,21 @@ export class DTRExp {
    */
   next(after: DateInput, opts?: IEvalOptions): IInterval | null {
     return nextInterval(this.ir, toEpochMs(after), opts?.tz ?? 'UTC');
+  }
+
+  /**
+   *  The maximal covered interval containing `instant`, or `null` when the
+   *  instant is not covered; `covers(t)` holds iff `covering(t)` is not null.
+   *  Coverage that runs to the edge of the year 1–9999 domain starts or ends
+   *  there. This is the "applies now, until …" half of a display; `next()` is
+   *  the "next applies at …" half.
+   *
+   *  @example
+   *  parse('T0900:1800 E1:5').covering('2026-07-07T10:00:00Z');
+   *  // → { start: 2026-07-07T09:00:00Z, end: 2026-07-07T18:00:00Z }
+   */
+  covering(instant: DateInput, opts?: IEvalOptions): IInterval | null {
+    return coveringInterval(this.ir, toEpochMs(instant), opts?.tz ?? 'UTC');
   }
 
   /**
