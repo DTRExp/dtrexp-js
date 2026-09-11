@@ -6,6 +6,24 @@ import vectors from './vectors-extended.json' with { type: 'json' };
 type Edge = string | null;
 type Expected = [Edge, Edge] | null;
 
+interface IGroup {
+  id: string;
+  expression: string;
+  tz: string;
+  cases: Record<string, Expected>;
+}
+
+interface IWindowGroup {
+  id: string;
+  expression: string;
+  tz: string;
+  window: [string, string];
+  expected: [string, string][];
+}
+
+// JSON imports infer `string[]` for the interval pairs; the schema is fixed by the spec, so type it once.
+const ext = vectors as unknown as { next: IGroup[]; covering: IGroup[]; intersect: IWindowGroup[] };
+
 const iso = (d: Date): string => d.toISOString().replace('.000Z', 'Z');
 // Groups that scan to the domain edge (ids marked `continuous` / `open-ended`) take seconds under
 // mutation instrumentation; the Stryker config sets DTREXP_SKIP_HORIZON to leave them to the normal run.
@@ -25,11 +43,11 @@ function expectInterval(actual: { start: Date; end: Date } | null, expected: Exp
 
 for (const op of ['next', 'covering'] as const) {
   describe(`conformance (extended): ${op}()`, () => {
-    for (const group of vectors[op]) {
+    for (const group of ext[op]) {
       if (skipHorizon && scansToEdge(group.id)) continue;
       describe(`${group.id} — '${group.expression}' [${group.tz}]`, () => {
         const dtrexp = parse(group.expression);
-        for (const [instant, expected] of Object.entries(group.cases as Record<string, Expected>)) {
+        for (const [instant, expected] of Object.entries(group.cases)) {
           it(`${instant} → ${JSON.stringify(expected)}`, () => {
             expectInterval(dtrexp[op](instant, { tz: group.tz }), expected);
           });
@@ -40,9 +58,9 @@ for (const op of ['next', 'covering'] as const) {
 }
 
 describe('conformance (extended): intersect()', () => {
-  for (const group of vectors.intersect) {
+  for (const group of ext.intersect) {
     it(`${group.id} — '${group.expression}' [${group.tz}] over ${group.window.join(' … ')}`, () => {
-      const [start, end] = group.window as [string, string];
+      const [start, end] = group.window;
       const actual = parse(group.expression)
         .intersect(start, end, { tz: group.tz })
         .map((i) => [iso(i.start), iso(i.end)]);
