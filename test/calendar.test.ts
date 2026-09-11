@@ -1,4 +1,3 @@
-import { epochFromPseudo } from '../src/utils/calendar.js';
 import {
   addMonthsConstrain,
   civilFromDays,
@@ -153,6 +152,9 @@ describe('calendar: time-zone field extraction', () => {
     expect(epochFromLocal('UTC', 2026, 7, 7, 12, 0, 0)).toBe(Date.UTC(2026, 6, 7, 12));
     expect(epochFromLocal('Europe/Berlin', 2026, 7, 7, 9, 30, 0)).toBe(Date.UTC(2026, 6, 7, 7, 30));
     expect(epochFromLocal('Europe/Berlin', 2026, 1, 7, 9, 30, 0)).toBe(Date.UTC(2026, 0, 7, 8, 30));
+    expect(epochFromLocal('Europe/Berlin', 2026, 7, 7, 9, 30, 45)).toBe(
+      Date.UTC(2026, 6, 7, 7, 30, 45)
+    );
   });
 
   it('resolves DST-gap local times forward and repeated ones to the earlier pass', () => {
@@ -211,8 +213,6 @@ describe('fieldsFromInstant — zoned seconds and milliseconds', () => {
 });
 
 describe('calendar: mutation-hardening — wide-range and boundary behaviour', () => {
-  const MS_PER_DAY = 86_400_000;
-
   // civilFromDays' century correction (+floor(doe/36_524)) only changes the computed
   // year-of-era on the days where the running total crosses a 365 boundary — the 1 Mar
   // after a century's worth of day-of-era. Round-tripping mid-year dates never sees it.
@@ -265,13 +265,6 @@ describe('calendar: mutation-hardening — wide-range and boundary behaviour', (
 
     const post = fieldsFromInstant(1_000_000_123, 'Europe/Istanbul');
     expect(post.msOfDay % 1000).toBe(123);
-  });
-
-  it('preserves sub-second ms through epochFromPseudo', () => {
-    const pseudo = epochDay(2024, 3, 1) * MS_PER_DAY + 3_600_000 + 123;
-    expect(epochFromPseudo('UTC', pseudo)).toBe(
-      epochDay(2024, 3, 1) * MS_PER_DAY + 3_600_000 + 123
-    );
   });
 
   // The two-candidate search: a DST-gap local time has no valid instant, so the

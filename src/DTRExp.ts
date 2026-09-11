@@ -45,7 +45,7 @@ export class DTRExp {
    *  (default `'UTC'`).
    *
    *  @example
-   *  parse('T0900-1800 E1-5').covers(new Date(), { tz: 'Europe/Berlin' });
+   *  parse('T0900:1800 E1:5').covers(new Date(), { tz: 'Europe/Berlin' });
    */
   covers(instant: DateInput, opts?: IEvalOptions): boolean {
     return coversInstant(this.ir, toEpochMs(instant), opts?.tz ?? 'UTC');
@@ -66,10 +66,14 @@ export class DTRExp {
   /**
    *  The first maximal covered interval starting strictly after `after`;
    *  coverage that already contains `after` is skipped. Returns `null` when
-   *  no further interval starts before the year-9999 horizon.
+   *  no further interval starts before the year-9999 horizon: the coverage is
+   *  exhausted, or it is continuous from `after` on (`E1:7` covers every
+   *  instant, so nothing ever starts). Neither means "never applies"; ask
+   *  `covers(after)` for the current state. Transition days follow §9.3 like
+   *  `covers()`: a gap time yields no interval, a repeated one yields two.
    *
    *  @example
-   *  parse('T0900-1800 E1-5').next('2026-07-07T10:00:00Z');
+   *  parse('T0900:1800 E1:5').next('2026-07-07T10:00:00Z');
    *  // → { start: 2026-07-08T09:00:00Z, end: 2026-07-08T18:00:00Z }
    */
   next(after: DateInput, opts?: IEvalOptions): IInterval | null {
@@ -113,7 +117,7 @@ export class DTRExp {
  *  Throws {@link DTRExpSyntaxError} with a position and stable `code` on invalid input.
  *
  *  @example
- *  const businessHours = parse('T0900-1800 E1-5');
+ *  const businessHours = parse('T0900:1800 E1:5');
  */
 export function parse(expression: string): DTRExp {
   const { ir, warnings } = parseToIR(expression);

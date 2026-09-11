@@ -7,12 +7,13 @@ import type {
   ISelector,
   Unit
 } from '../types/index.js';
+import type { ILocalDay } from '../utils/index.js';
 import {
   civilFromDays,
   epochDay,
-  epochFromPseudo,
   fieldsFromCivil,
-  fieldsFromInstant
+  fieldsFromInstant,
+  localDay
 } from '../utils/index.js';
 import {
   boundsPseudoWindow,
@@ -82,8 +83,12 @@ export function unitRanges(selector: ISelector, count: number, unitMs: number): 
   return out;
 }
 
-/** Covered ms-of-day ranges of one expression on one local day (sorted, merged). */
-function dayRanges(plan: IExprPlan, day: number, f: IFields, tz: string): IRange[] {
+/**
+ *  Covered ms-of-day ranges of one expression on one local day (sorted, merged),
+ *  in local wall-clock time. Sub-day cadences are left out: they run on absolute
+ *  time and are intersected after the day is mapped onto it.
+ */
+function dayRanges(plan: IExprPlan, day: number, f: IFields): IRange[] {
   // Stryker disable next-line ArrayDeclaration: equivalent — the only consumer sortMerges this result, and its hi > lo filter drops any non-range garbage.
   if (!matchesDayLevel(plan.expr, f, plan.present)) return [];
   const dayLo = day * MS_PER_DAY;
@@ -98,36 +103,50 @@ function dayRanges(plan: IExprPlan, day: number, f: IFields, tz: string): IRange
   }
   const cadence = plan.expr.cadence;
   // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — short-circuit only: intersecting an empty list is an empty list.
-  if (cadence && ranges.length > 0) {
-    let windows: IRange[];
-    if (isSubDayCadence(cadence)) {
-      // sub-day cadences run on absolute time; map their edges into this local day
-      const loEpoch = epochFromPseudo(tz, dayLo);
-      const hiEpoch = epochFromPseudo(tz, dayLo + MS_PER_DAY);
-      windows = cadenceAbsWindows(cadence, loEpoch, hiEpoch, tz).map(([s, e]) => ({
-        // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — an edge at/before the day start maps to a pseudo ≤ 0 (== 0 at equality, by round-trip), and the result is then intersected with ranges ⊆ [0, MS_PER_DAY), which clamps identically.
-        lo: s <= loEpoch ? 0 : fieldsFromInstant(s, tz).pseudo - dayLo,
-        // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — mirror of the lo edge: a pseudo ≥ MS_PER_DAY is clamped by the same intersection.
-        hi: e >= hiEpoch ? MS_PER_DAY : fieldsFromInstant(e, tz).pseudo - dayLo
-      }));
-    } else {
-      windows = cadencePseudoWindows(cadence, dayLo, dayLo + MS_PER_DAY).map(([s, e]) => ({
-        lo: Math.max(0, s - dayLo),
-        hi: Math.min(MS_PER_DAY, e - dayLo)
-      }));
-    }
+  if (cadence && !isSubDayCadence(cadence) && ranges.length > 0) {
+    const windows = cadencePseudoWindows(cadence, dayLo, dayLo + MS_PER_DAY).map(([s, e]) => ({
+      lo: Math.max(0, s - dayLo),
+      hi: Math.min(MS_PER_DAY, e - dayLo)
+    }));
     ranges = intersectRanges(ranges, sortMerge(windows));
   }
   return ranges;
 }
 
-function dayCoverage(plans: IExprPlan[], day: number, tz: string): IRange[] {
+interface IDayCoverage {
+  /** Covered absolute `[lo, hi)` ranges of the day (sorted, merged). */
+  ranges: IRange[];
+  /** Absolute end of the local day; `Infinity` when nothing matched the day (so nothing can chain through it). */
+  absEnd: number;
+}
+
+/** Coverage of one local day, mapped onto absolute time (spec §9.3). */
+function dayCoverage(plans: IExprPlan[], day: number, tz: string): IDayCoverage {
   const civil = civilFromDays(day);
   const f = fieldsFromCivil(civil.year, civil.month, civil.day);
-  // Stryker disable next-line ArrayDeclaration: equivalent — the first sortMerge filters any non-range garbage (hi > lo is false for a string).
+  const dayLo = day * MS_PER_DAY;
+  let local: ILocalDay | null = null;
   let covered: IRange[] = [];
-  for (const plan of plans) covered = sortMerge(covered.concat(dayRanges(plan, day, f, tz)));
-  return covered;
+  for (const plan of plans) {
+    const ranges = dayRanges(plan, day, f);
+    // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — short-circuit only: mapping an empty list is an empty list, and the zone probes it skips are pure cost.
+    if (ranges.length === 0) continue;
+    local ??= localDay(tz, day);
+    // Stryker disable next-line ArrayDeclaration: equivalent — sortMerge's hi > lo filter drops any non-range garbage seeded here.
+    let abs: IRange[] = [];
+    for (const r of ranges) abs = abs.concat(local.map(dayLo + r.lo, dayLo + r.hi));
+    abs = sortMerge(abs);
+    const cadence = plan.expr.cadence;
+    if (cadence && isSubDayCadence(cadence)) {
+      const windows = cadenceAbsWindows(cadence, local.start, local.end, tz).map(([lo, hi]) => ({
+        lo,
+        hi
+      }));
+      abs = intersectRanges(abs, sortMerge(windows));
+    }
+    covered = sortMerge(covered.concat(abs));
+  }
+  return { ranges: covered, absEnd: local ? local.end : Number.POSITIVE_INFINITY };
 }
 
 /**
@@ -140,29 +159,25 @@ export function intersectWindow(
   endEpoch: number,
   tz: string
 ): IInterval[] {
-  // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — a degenerate window yields no intervals anyway: every day clips to e <= s.
+  // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — a degenerate window yields no intervals anyway: every range clips to e <= s.
   if (endEpoch <= startEpoch) return [];
-  const lo = fieldsFromInstant(startEpoch, tz).pseudo;
+  const firstDay = Math.floor(fieldsFromInstant(startEpoch, tz).pseudo / MS_PER_DAY);
   const hi = Math.min(fieldsFromInstant(endEpoch, tz).pseudo, HORIZON_PSEUDO);
+  // Stryker disable next-line ArithmeticOperator: equivalent — the extra day (when hi is an exact day boundary) starts at endEpoch, so every range clips to e = min(endEpoch, …) <= s.
+  const lastDay = Math.floor((hi - 1) / MS_PER_DAY);
   const out: IRange[] = [];
   const plans = planFor(ir);
-  // Stryker disable next-line ArithmeticOperator: equivalent — the extra day (when hi is an exact day boundary) starts at hi, so every range clips to e = min(hi, …) <= s.
-  const lastDay = Math.floor((hi - 1) / MS_PER_DAY);
-  for (let day = Math.floor(lo / MS_PER_DAY); day <= lastDay; day++) {
-    const dayLo = day * MS_PER_DAY;
-    for (const r of dayCoverage(plans, day, tz)) {
-      const s = Math.max(lo, dayLo + r.lo);
-      const e = Math.min(hi, dayLo + r.hi);
+  for (let day = firstDay; day <= lastDay; day++) {
+    for (const r of dayCoverage(plans, day, tz).ranges) {
+      const s = Math.max(startEpoch, r.lo);
+      const e = Math.min(endEpoch, r.hi);
       if (e <= s) continue;
       const last = out[out.length - 1];
       if (last && s <= last.hi) last.hi = Math.max(last.hi, e);
       else out.push({ lo: s, hi: e });
     }
   }
-  return out.map((r) => ({
-    start: new Date(epochFromPseudo(tz, r.lo)),
-    end: new Date(epochFromPseudo(tz, r.hi))
-  }));
+  return out.map(toInterval);
 }
 
 /**
@@ -189,44 +204,36 @@ export function nextInterval(ir: IDTRExpIR, afterEpoch: number, tz: string): IIn
   let end = -1;
   // Stryker disable next-line EqualityOperator: equivalent — the extra day at the horizon is clipped to nothing by bounds ≤ horizon, and for unbounded expressions year 10000 cannot match anything years 1970–9999 did not.
   for (let day = Math.floor(afterPseudo / MS_PER_DAY); day * MS_PER_DAY < horizon; day++) {
-    const dayLo = day * MS_PER_DAY;
-    for (const r of dayCoverage(plans, day, tz)) {
-      const lo = dayLo + r.lo;
-      const hi = dayLo + r.hi;
+    const { ranges, absEnd } = dayCoverage(plans, day, tz);
+    for (const r of ranges) {
       if (start !== -1) {
-        if (lo === end) {
-          end = hi;
+        if (r.lo === end) {
+          end = r.hi;
           continue;
         }
-        return toInterval(start, Math.min(end, horizon), tz);
+        return toInterval({ lo: start, hi: end });
       }
-      // Stryker disable next-line EqualityOperator: equivalent — a window ending exactly at afterPseudo cannot chain: same-day adjacency is pre-merged, so the stale skipCursor never equals a later lo.
-      if (hi <= afterPseudo) continue;
-      // Stryker disable next-line ConditionalExpression: equivalent — after merging, at most one window contains afterPseudo, so re-entering this branch reassigns the same cursor.
-      if (skipCursor === -1 && lo <= afterPseudo) {
-        skipCursor = hi; // afterEpoch sits inside this window — skip its chain
-        // (no `skipCursor !== -1` guard needed below: lo is a pseudo-ms ≥ 0, never -1)
-      } else if (lo === skipCursor) {
-        skipCursor = hi; // contiguous continuation of the current window
+      // Stryker disable next-line EqualityOperator: equivalent — a window ending exactly at afterEpoch cannot chain: same-day adjacency is pre-merged, so the stale skipCursor never equals a later lo.
+      if (r.hi <= afterEpoch) continue;
+      // Stryker disable next-line ConditionalExpression: equivalent — after merging, at most one window contains afterEpoch, so re-entering this branch reassigns the same cursor.
+      if (skipCursor === -1 && r.lo <= afterEpoch) {
+        skipCursor = r.hi; // afterEpoch sits inside this window — skip its chain
+        // (no `skipCursor !== -1` guard needed below: lo is an epoch ms of a covered day, never -1)
+      } else if (r.lo === skipCursor) {
+        skipCursor = r.hi; // contiguous continuation of the current window
       } else {
-        start = lo;
-        end = hi;
+        start = r.lo;
+        end = r.hi;
       }
     }
-    // Stryker disable next-line ConditionalExpression,ArithmeticOperator,BlockStatement: equivalent — the day-end early return is a scan optimization: the open chain either continues or returns the identical interval later (the L-final return uses the same clamp).
-    if (start !== -1 && end < dayLo + MS_PER_DAY) {
-      return toInterval(start, Math.min(end, horizon), tz);
-    }
+    // Stryker disable next-line ConditionalExpression,EqualityOperator,BlockStatement: equivalent — the day-end early return is a scan optimization: the open chain either continues or returns the identical interval later (the final return uses the same values).
+    if (start !== -1 && end < absEnd) return toInterval({ lo: start, hi: end });
   }
-  // Stryker disable next-line MethodExpression: equivalent — reaching this return with an open chain means coverage ran to the horizon (any gap returns earlier), so end ≥ horizon and min/max coincide.
-  return start !== -1 ? toInterval(start, Math.min(end, horizon), tz) : null;
+  return start !== -1 ? toInterval({ lo: start, hi: end }) : null;
 }
 
-function toInterval(startPseudo: number, endPseudo: number, tz: string): IInterval {
-  return {
-    start: new Date(epochFromPseudo(tz, startPseudo)),
-    end: new Date(epochFromPseudo(tz, endPseudo))
-  };
+function toInterval(r: IRange): IInterval {
+  return { start: new Date(r.lo), end: new Date(r.hi) };
 }
 
 // -------------------------------
