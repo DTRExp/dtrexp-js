@@ -11,4 +11,4 @@ export {
   selectorCoversValue
 } from './Evaluator.js';
 export { type IParseResult, literalPseudo, parseToIR } from './Parser.js';
-export { intersectWindow, nextInterval } from './Stepper.js';
+export { coveringInterval, intersectWindow, nextInterval } from './Stepper.js';

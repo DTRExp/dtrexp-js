@@ -55,6 +55,10 @@ dtr.intersect('2026-07-06T00:00:00Z', '2026-07-13T00:00:00Z');
 dtr.next('2026-07-11T10:00:00Z');
 // → { start: 2026-07-13T09:00:00Z, end: 2026-07-13T18:00:00Z }
 
+// "does it apply now, and until when?"
+dtr.covering('2026-07-13T10:00:00Z');
+// → { start: 2026-07-13T09:00:00Z, end: 2026-07-13T18:00:00Z }
+
 parse('E7#-1 M4').describe();
 // → 'the last Sunday in April'
 
@@ -81,6 +85,7 @@ parse('D25 M12').toRRule();
 | `covers(instant, opts?)` | Whether the expression covers the instant. O(#components) integer tests after one field extraction. |
 | `intersect(start, end, opts?)` | Covered intervals clipped to `[start, end)`: a finite, sorted, merged list of half-open `{ start: Date, end: Date }` intervals. |
 | `next(after, opts?)` | The first **maximal** covered interval starting strictly after `after` (coverage containing `after` is skipped). `null` when nothing starts before the year-9999 horizon: the coverage is exhausted, or it is continuous from `after` on (`E1:7` covers every instant, so nothing ever *starts*); neither means "never applies", `covers(after)` says whether it applies now. |
+| `covering(instant, opts?)` | The **maximal** covered interval containing `instant`, or `null` when it is not covered (`covers(t)` holds iff `covering(t)` is not `null`). The "applies now, until …" half of a display; `next()` is the "next applies at …" half. Coverage that reaches the edge of the year 1–9999 domain starts or ends there. |
 | `describe(locale?)` | Human-readable English rendering (`'E7#-1 M4'` → *"the last Sunday in April"*). v1 supports `'en'`; the parameter is reserved. |
 | `toRRule()` | RFC 5545 RRULE (+ `DTSTART` line when anchored) for the losslessly-mappable subset, else `null`. Constrained cadences emit RFC 7529 `SKIP=BACKWARD`. |
 | `toString()` | Canonical normalized form (redundant components dropped, canonical order, wraps re-fused). |
@@ -92,7 +97,7 @@ parse('D25 M12').toRRule();
 - **Instants** (`DateInput`): `Date`, epoch milliseconds, ISO 8601 string, or any Temporal-like object exposing `epochMilliseconds` (no Temporal dependency).
 - **`opts.tz`**: IANA time zone for evaluation, default `'UTC'`. The zone is always an **evaluation parameter**, never part of the expression; `T0900:1800` means local business hours wherever you evaluate it. DST is handled per [spec §9.3](https://github.com/DTRExp/dtrexp/blob/main/spec.md#93-dst-and-local-time): spring-forward gap times cover nothing; repeated fall-back times are covered on both passes. `intersect()` and `next()` return exactly the instants `covers()` accepts, transition days included: a clock time inside a gap yields no interval, a repeated one yields two.
 
-## Expression Syntax (spec draft 2.8)
+## Expression Syntax (spec draft 2.9)
 
 The full grammar and semantics live in the **[specification](https://github.com/DTRExp/dtrexp/blob/main/spec.md)**; the essentials:
 

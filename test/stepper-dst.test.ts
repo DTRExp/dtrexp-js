@@ -122,6 +122,11 @@ describe('a day swallowed whole by a transition (Pacific/Apia 2011-12-30)', () =
       '2011-12-29T10:00:00.000Z',
       '2011-12-31T10:00:00.000Z'
     ]);
+    // the 30th is not in the expression at all: the 29th and the 31st are still one interval
+    expect(pair(parse('D29,31 M12').next('2011-12-01T00:00:00Z', apia)!)).toEqual([
+      '2011-12-29T10:00:00.000Z',
+      '2011-12-31T10:00:00.000Z'
+    ]);
   });
 });
 
@@ -159,6 +164,15 @@ describe('intersect() across DST transitions', () => {
         .intersect('2026-10-25T00:00:00Z', '2026-10-26T00:00:00Z', berlin)
         .map(pair)
     ).toEqual([['2026-10-25T22:30:00.000Z', '2026-10-25T22:31:00.000Z']]);
+  });
+
+  it('keeps an absolute-time cadence window in the first hour of the day after spring-forward', () => {
+    // anchored at 23:30 CET, every 24 elapsed hours: after the shift it lands at 00:30 CEST (22:30Z)
+    expect(
+      parse('20260101T2330/24H/1m')
+        .intersect('2026-03-29T12:00:00Z', '2026-03-30T12:00:00Z', berlin)
+        .map(pair)
+    ).toEqual([['2026-03-29T22:30:00.000Z', '2026-03-29T22:31:00.000Z']]);
   });
 
   it('runs an absolute-time cadence straight through the fall-back hour', () => {

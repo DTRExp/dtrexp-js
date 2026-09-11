@@ -1,0 +1,500 @@
+{
+  "spec": 2.9,
+  "tier": "extended",
+  "description": "DTRExp draft-2.9 Extended (Tier 2) vectors. Core conformance is decided by vectors.json alone and is unchanged. An implementation that ships an operation named here (next, covering, intersect) MUST pass that operation's section; one that does not ship it ignores the section. Instants are absolute ISO 8601 UTC; tz is the evaluation zone; every interval is half-open [start, end) written as a two-element array; an expected null means no interval; a null start or end means the interval runs to the edge of the year 1–9999 domain (the implementation's own floor or horizon instant), which the vector does not pin.",
+  "next": [
+    {
+      "id": "next-skips-coverage-in-progress",
+      "expression": "T0900:1800 E1:5",
+      "tz": "UTC",
+      "cases": {
+        "2026-07-07T10:00:00Z": [
+          "2026-07-08T09:00:00Z",
+          "2026-07-08T18:00:00Z"
+        ],
+        "2026-07-07T09:00:00Z": [
+          "2026-07-08T09:00:00Z",
+          "2026-07-08T18:00:00Z"
+        ],
+        "2026-07-11T10:00:00Z": [
+          "2026-07-13T09:00:00Z",
+          "2026-07-13T18:00:00Z"
+        ]
+      }
+    },
+    {
+      "id": "next-adjacent-days-merge",
+      "expression": "E6:7",
+      "tz": "UTC",
+      "cases": {
+        "2026-07-07T00:00:00Z": [
+          "2026-07-11T00:00:00Z",
+          "2026-07-13T00:00:00Z"
+        ],
+        "2026-07-11T12:00:00Z": [
+          "2026-07-18T00:00:00Z",
+          "2026-07-20T00:00:00Z"
+        ]
+      }
+    },
+    {
+      "id": "next-same-day-gap-ends-the-interval",
+      "expression": "T0900:1200,1400:1700",
+      "tz": "UTC",
+      "cases": {
+        "2026-07-07T08:00:00Z": [
+          "2026-07-07T09:00:00Z",
+          "2026-07-07T12:00:00Z"
+        ],
+        "2026-07-07T15:00:00Z": [
+          "2026-07-08T09:00:00Z",
+          "2026-07-08T12:00:00Z"
+        ]
+      }
+    },
+    {
+      "id": "next-ordinal-months-ahead",
+      "expression": "E7#-1 M4",
+      "tz": "UTC",
+      "cases": {
+        "2026-01-01T00:00:00Z": [
+          "2026-04-26T00:00:00Z",
+          "2026-04-27T00:00:00Z"
+        ]
+      }
+    },
+    {
+      "id": "next-cadence-window",
+      "expression": "20200106/10D/3D",
+      "tz": "UTC",
+      "cases": {
+        "2020-01-01T00:00:00Z": [
+          "2020-01-06T00:00:00Z",
+          "2020-01-09T00:00:00Z"
+        ],
+        "2020-01-17T00:00:00Z": [
+          "2020-01-26T00:00:00Z",
+          "2020-01-29T00:00:00Z"
+        ]
+      }
+    },
+    {
+      "id": "next-null-exhausted",
+      "expression": "M3 *:20261231",
+      "tz": "UTC",
+      "cases": {
+        "2026-04-01T00:00:00Z": null
+      }
+    },
+    {
+      "id": "next-null-unsatisfiable",
+      "expression": "D30 M2 *:20301231",
+      "tz": "UTC",
+      "cases": {
+        "2026-01-01T00:00:00Z": null
+      }
+    },
+    {
+      "id": "next-null-continuous",
+      "expression": "E1:7",
+      "tz": "UTC",
+      "cases": {
+        "2026-09-11T00:00:00Z": null
+      }
+    },
+    {
+      "id": "next-dst-gap-clock-time-skipped-berlin",
+      "expression": "T0230",
+      "tz": "Europe/Berlin",
+      "cases": {
+        "2026-03-28T12:00:00Z": [
+          "2026-03-30T00:30:00Z",
+          "2026-03-30T00:31:00Z"
+        ]
+      }
+    },
+    {
+      "id": "next-dst-gap-clips-a-range-berlin",
+      "expression": "T0130:0230",
+      "tz": "Europe/Berlin",
+      "cases": {
+        "2026-03-28T12:00:00Z": [
+          "2026-03-29T00:30:00Z",
+          "2026-03-29T01:00:00Z"
+        ]
+      }
+    },
+    {
+      "id": "next-dst-gap-starts-a-range-berlin",
+      "expression": "T0230:0400",
+      "tz": "Europe/Berlin",
+      "cases": {
+        "2026-03-28T12:00:00Z": [
+          "2026-03-29T01:00:00Z",
+          "2026-03-29T02:00:00Z"
+        ]
+      }
+    },
+    {
+      "id": "next-dst-fallback-both-passes-berlin",
+      "expression": "T0230:0300",
+      "tz": "Europe/Berlin",
+      "cases": {
+        "2026-10-24T12:00:00Z": [
+          "2026-10-25T00:30:00Z",
+          "2026-10-25T01:00:00Z"
+        ],
+        "2026-10-25T01:00:00Z": [
+          "2026-10-25T01:30:00Z",
+          "2026-10-25T02:00:00Z"
+        ],
+        "2026-10-25T02:00:00Z": [
+          "2026-10-26T01:30:00Z",
+          "2026-10-26T02:00:00Z"
+        ]
+      }
+    },
+    {
+      "id": "next-dst-25-hour-day-berlin",
+      "expression": "E7",
+      "tz": "Europe/Berlin",
+      "cases": {
+        "2026-10-23T00:00:00Z": [
+          "2026-10-24T22:00:00Z",
+          "2026-10-25T23:00:00Z"
+        ],
+        "2026-03-27T00:00:00Z": [
+          "2026-03-28T23:00:00Z",
+          "2026-03-29T22:00:00Z"
+        ]
+      }
+    },
+    {
+      "id": "next-dst-midnight-gap-santiago",
+      "expression": "D8 M9",
+      "tz": "America/Santiago",
+      "cases": {
+        "2024-09-01T00:00:00Z": [
+          "2024-09-08T04:00:00Z",
+          "2024-09-09T03:00:00Z"
+        ]
+      }
+    },
+    {
+      "id": "next-dst-midnight-overlap-havana",
+      "expression": "D2:3 M11",
+      "tz": "America/Havana",
+      "cases": {
+        "2024-10-20T00:00:00Z": [
+          "2024-11-02T04:00:00Z",
+          "2024-11-04T05:00:00Z"
+        ]
+      }
+    }
+  ],
+  "covering": [
+    {
+      "id": "covering-business-hours",
+      "expression": "T0900:1800 E1:5",
+      "tz": "UTC",
+      "cases": {
+        "2026-07-07T10:00:00Z": [
+          "2026-07-07T09:00:00Z",
+          "2026-07-07T18:00:00Z"
+        ],
+        "2026-07-07T09:00:00Z": [
+          "2026-07-07T09:00:00Z",
+          "2026-07-07T18:00:00Z"
+        ],
+        "2026-07-07T18:00:00Z": null,
+        "2026-07-11T10:00:00Z": null
+      }
+    },
+    {
+      "id": "covering-adjacent-days-merge",
+      "expression": "E6:7",
+      "tz": "UTC",
+      "cases": {
+        "2026-07-12T12:00:00Z": [
+          "2026-07-11T00:00:00Z",
+          "2026-07-13T00:00:00Z"
+        ],
+        "2026-07-13T00:00:00Z": null
+      }
+    },
+    {
+      "id": "covering-month",
+      "expression": "M3",
+      "tz": "UTC",
+      "cases": {
+        "2024-03-15T12:00:00Z": [
+          "2024-03-01T00:00:00Z",
+          "2024-04-01T00:00:00Z"
+        ],
+        "2024-04-01T00:00:00Z": null
+      }
+    },
+    {
+      "id": "covering-cadence-window",
+      "expression": "20200106/10D/3D",
+      "tz": "UTC",
+      "cases": {
+        "2020-01-17T12:00:00Z": [
+          "2020-01-16T00:00:00Z",
+          "2020-01-19T00:00:00Z"
+        ],
+        "2020-01-19T00:00:00Z": null
+      }
+    },
+    {
+      "id": "covering-open-ended",
+      "expression": "Y2030:*",
+      "tz": "UTC",
+      "cases": {
+        "2035-06-01T00:00:00Z": [
+          "2030-01-01T00:00:00Z",
+          null
+        ]
+      }
+    },
+    {
+      "id": "covering-continuous",
+      "expression": "E1:7",
+      "tz": "UTC",
+      "cases": {
+        "2026-09-11T00:00:00Z": [
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "id": "covering-dst-fallback-second-pass-berlin",
+      "expression": "T0230:0300",
+      "tz": "Europe/Berlin",
+      "cases": {
+        "2026-10-25T01:45:00Z": [
+          "2026-10-25T01:30:00Z",
+          "2026-10-25T02:00:00Z"
+        ],
+        "2026-10-25T00:45:00Z": [
+          "2026-10-25T00:30:00Z",
+          "2026-10-25T01:00:00Z"
+        ],
+        "2026-10-25T01:15:00Z": null
+      }
+    },
+    {
+      "id": "covering-dst-25-hour-day-berlin",
+      "expression": "E7",
+      "tz": "Europe/Berlin",
+      "cases": {
+        "2026-10-25T12:00:00Z": [
+          "2026-10-24T22:00:00Z",
+          "2026-10-25T23:00:00Z"
+        ]
+      }
+    },
+    {
+      "id": "covering-dst-gap-clips-a-range-berlin",
+      "expression": "T0130:0230",
+      "tz": "Europe/Berlin",
+      "cases": {
+        "2026-03-29T00:45:00Z": [
+          "2026-03-29T00:30:00Z",
+          "2026-03-29T01:00:00Z"
+        ],
+        "2026-03-29T01:15:00Z": null
+      }
+    },
+    {
+      "id": "covering-dst-midnight-overlap-cairo",
+      "expression": "D26:27 M10 Y2023",
+      "tz": "Africa/Cairo",
+      "cases": {
+        "2023-10-27T10:00:00Z": [
+          "2023-10-25T21:00:00Z",
+          "2023-10-27T22:00:00Z"
+        ]
+      }
+    },
+    {
+      "id": "covering-skipped-day-apia",
+      "expression": "D29:31 M12 Y2011",
+      "tz": "Pacific/Apia",
+      "cases": {
+        "2011-12-31T00:00:00Z": [
+          "2011-12-29T10:00:00Z",
+          "2011-12-31T10:00:00Z"
+        ]
+      }
+    }
+  ],
+  "intersect": [
+    {
+      "id": "intersect-clips-to-window",
+      "expression": "T0900:1800",
+      "tz": "UTC",
+      "window": [
+        "2026-07-06T10:00:00Z",
+        "2026-07-06T23:00:00Z"
+      ],
+      "expected": [
+        [
+          "2026-07-06T10:00:00Z",
+          "2026-07-06T18:00:00Z"
+        ]
+      ]
+    },
+    {
+      "id": "intersect-one-per-business-day",
+      "expression": "T0900:1800 E1:5",
+      "tz": "UTC",
+      "window": [
+        "2026-07-06T00:00:00Z",
+        "2026-07-13T00:00:00Z"
+      ],
+      "expected": [
+        [
+          "2026-07-06T09:00:00Z",
+          "2026-07-06T18:00:00Z"
+        ],
+        [
+          "2026-07-07T09:00:00Z",
+          "2026-07-07T18:00:00Z"
+        ],
+        [
+          "2026-07-08T09:00:00Z",
+          "2026-07-08T18:00:00Z"
+        ],
+        [
+          "2026-07-09T09:00:00Z",
+          "2026-07-09T18:00:00Z"
+        ],
+        [
+          "2026-07-10T09:00:00Z",
+          "2026-07-10T18:00:00Z"
+        ]
+      ]
+    },
+    {
+      "id": "intersect-union-branches",
+      "expression": "E5#1 | E5#3",
+      "tz": "UTC",
+      "window": [
+        "2026-07-01T00:00:00Z",
+        "2026-08-01T00:00:00Z"
+      ],
+      "expected": [
+        [
+          "2026-07-03T00:00:00Z",
+          "2026-07-04T00:00:00Z"
+        ],
+        [
+          "2026-07-17T00:00:00Z",
+          "2026-07-18T00:00:00Z"
+        ]
+      ]
+    },
+    {
+      "id": "intersect-sub-day-cadence",
+      "expression": "20200106/6H/1H",
+      "tz": "UTC",
+      "window": [
+        "2020-01-06T00:00:00Z",
+        "2020-01-07T00:00:00Z"
+      ],
+      "expected": [
+        [
+          "2020-01-06T00:00:00Z",
+          "2020-01-06T01:00:00Z"
+        ],
+        [
+          "2020-01-06T06:00:00Z",
+          "2020-01-06T07:00:00Z"
+        ],
+        [
+          "2020-01-06T12:00:00Z",
+          "2020-01-06T13:00:00Z"
+        ],
+        [
+          "2020-01-06T18:00:00Z",
+          "2020-01-06T19:00:00Z"
+        ]
+      ]
+    },
+    {
+      "id": "intersect-empty-window",
+      "expression": "M3",
+      "tz": "UTC",
+      "window": [
+        "2026-07-07T10:00:00Z",
+        "2026-07-07T10:00:00Z"
+      ],
+      "expected": []
+    },
+    {
+      "id": "intersect-dst-fallback-two-intervals-berlin",
+      "expression": "T0230:0300",
+      "tz": "Europe/Berlin",
+      "window": [
+        "2026-10-24T22:00:00Z",
+        "2026-10-25T06:00:00Z"
+      ],
+      "expected": [
+        [
+          "2026-10-25T00:30:00Z",
+          "2026-10-25T01:00:00Z"
+        ],
+        [
+          "2026-10-25T01:30:00Z",
+          "2026-10-25T02:00:00Z"
+        ]
+      ]
+    },
+    {
+      "id": "intersect-dst-gap-empty-berlin",
+      "expression": "T0200:0300",
+      "tz": "Europe/Berlin",
+      "window": [
+        "2026-03-28T22:00:00Z",
+        "2026-03-29T06:00:00Z"
+      ],
+      "expected": []
+    },
+    {
+      "id": "intersect-dst-wall-clock-cadence-window-berlin",
+      "expression": "20260328T0230/1D/1H",
+      "tz": "Europe/Berlin",
+      "window": [
+        "2026-03-28T00:00:00Z",
+        "2026-03-30T00:00:00Z"
+      ],
+      "expected": [
+        [
+          "2026-03-28T01:30:00Z",
+          "2026-03-28T02:30:00Z"
+        ],
+        [
+          "2026-03-29T01:00:00Z",
+          "2026-03-29T01:30:00Z"
+        ]
+      ]
+    },
+    {
+      "id": "intersect-skipped-day-apia",
+      "expression": "D29:31 M12",
+      "tz": "Pacific/Apia",
+      "window": [
+        "2011-12-28T00:00:00Z",
+        "2012-01-01T00:00:00Z"
+      ],
+      "expected": [
+        [
+          "2011-12-29T10:00:00Z",
+          "2011-12-31T10:00:00Z"
+        ]
+      ]
+    }
+  ]
+}
