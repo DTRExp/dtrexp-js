@@ -19,6 +19,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+      # npm 10 (bundled with Node 20 and 22) crashes resolving vitest's peer graph from scratch
+      # (the lockfile is git-ignored): "Cannot read properties of null (reading 'edgesOut')".
+      # npm 11 fixes it.
+      - run: npm i -g npm@11
       - run: npm install
       - run: npm run typecheck
       - run: npm run lint
