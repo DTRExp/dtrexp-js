@@ -31,6 +31,8 @@ jobs:
 
   mutation:
     runs-on: ubuntu-latest
+    # A full run takes 20-30 minutes; a slow runner can drag it on for hours.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js 24
