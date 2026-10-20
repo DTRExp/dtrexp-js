@@ -257,7 +257,23 @@ describe('parser: exact codes, messages and positions (mutation hardening)', () 
   it('accepts the boundary forms the checks must not swallow', () => {
     expect(validate('M3:3/2').valid).toBe(true); // a degenerate range is not a wrap
     expect(validate('M1/3/1').valid).toBe(true); // duration 1 is legal
-    expect(validate('M3\tY2018').valid).toBe(true); // tab is whitespace
+  });
+
+  it('takes only the ASCII space as whitespace (spec §1)', () => {
+    for (const [s, at] of [
+      ['M3\tY2018', 2],
+      ['\tM3', 0],
+      ['M3\t', 2],
+      ['M3|\tM5', 3],
+      ['M3\nD5', 2],
+      ['M3\u00a0D5', 2]
+    ] as const) {
+      expect(validate(s).errors[0]).toMatchObject({
+        position: at,
+        message: expect.stringMatching(/^Unexpected character/)
+      });
+    }
+    expect(validate('  M3   D5 |  M6  ').valid).toBe(true); // runs of spaces, anywhere
   });
 });
 

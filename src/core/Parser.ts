@@ -711,7 +711,7 @@ class Parser {
   // -------------------------------
 
   private skipSpaces(): void {
-    while (this.src[this.pos] === ' ' || this.src[this.pos] === '\t') this.pos++;
+    while (this.src[this.pos] === ' ') this.pos++;
   }
 
   private readDigits(): string {

@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Fixed
 
+- Fixed an issue where a tab was accepted as whitespace between components, around `|` and at either end. Spec §1 allows only the ASCII space; a tab is a syntax error now (`M3\tD5`, `\tM3`).
 - Fixed an issue where the zone-name cache, keyed on the name as given, grew without bound when callers passed many spellings of a zone (`'europe/berlin'`, `'EUROPE/BERLIN'`, …). It is cleared after 4096 names.
 - Fixed an issue where `validate()` returned warnings that could be changed, while `parse()` froze the same warnings. Both are frozen now.
 
