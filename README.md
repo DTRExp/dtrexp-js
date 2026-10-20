@@ -41,23 +41,28 @@ Requires Node.js ≥ 20. Zero runtime dependencies.
 ```ts
 import { parse } from 'dtrexp';
 
-const dtr = parse('T0900:1800 E1:5');
+// a Berlin store's opening hours: the zone travels with the expression
+const hours = parse('T0900:1800 E1:5').withZone('Europe/Berlin');
 
 // coverage — O(#components), built for per-request hot paths
-dtr.covers(new Date(), { tz: 'Europe/Berlin' });
+hours.covers(new Date());
 // → true (weekday, 09:00–18:00 Berlin local time)
 
 // enumeration on demand — a finite window is always a finite list
-dtr.intersect('2026-07-06T00:00:00Z', '2026-07-13T00:00:00Z');
+hours.intersect('2026-07-06T00:00:00Z', '2026-07-13T00:00:00Z');
 // → 5 intervals, one per business day
 
 // "when does it next apply?"
-dtr.next('2026-07-11T10:00:00Z');
-// → { start: 2026-07-13T09:00:00Z, end: 2026-07-13T18:00:00Z }
+hours.next('2026-07-11T10:00:00Z');
+// → { start: 2026-07-13T07:00:00Z, end: 2026-07-13T16:00:00Z }
 
 // "does it apply now, and until when?"
-dtr.covering('2026-07-13T10:00:00Z');
-// → { start: 2026-07-13T09:00:00Z, end: 2026-07-13T18:00:00Z }
+hours.covering('2026-07-13T10:00:00Z');
+// → { start: 2026-07-13T07:00:00Z, end: 2026-07-13T16:00:00Z }
+
+// a rule each viewer sees in their own zone: pass the zone per call
+const quietHours = parse('T2200:0700');
+quietHours.covers(new Date(), { tz: user.tz });
 
 parse('E7#-1 M4').describe();
 // → 'the last Sunday in April'
@@ -75,13 +80,15 @@ parse('D25 M12').toRRule();
 
 | Function | Description |
 | --- | --- |
-| `parse(expression)` | Parses a DTRExp string into an immutable `DTRExp`. Throws `DTRExpSyntaxError` with a stable `code` and character `position` on invalid input. The only way to construct a `DTRExp`. |
+| `parse(expression)` | Parses a DTRExp string into an immutable `DTRExp` (frozen at runtime too). Throws `DTRExpSyntaxError` with a stable `code` and character `position` on invalid input. The only way to construct a `DTRExp`. |
 | `validate(expression)` | Non-throwing variant. Returns `{ valid, errors, warnings }`; warnings include the spec's *unsatisfiability lint* (`D30 M2` parses but can never match). |
 
 ### `DTRExp` Instance
 
 | Member | Description |
 | --- | --- |
+| `withZone(tz)` | A copy whose evaluation defaults to the IANA zone `tz`; the original is left as it is. The copy's `source`, `toString()`, `describe()`, `toRRule()` and `warnings` are the same: the zone belongs to evaluation, never to the expression. A `{ tz }` passed to a call still wins. Throws `RangeError` at once on an unknown zone. |
+| `zone` | The bound zone in the platform's canonical form (`'utc'` → `'UTC'`, `'europe/berlin'` → `'Europe/Berlin'`), or `undefined` when none is bound. |
 | `covers(instant, opts?)` | Whether the expression covers the instant. O(#components) integer tests after one field extraction. |
 | `intersect(start, end, opts?)` | Covered intervals clipped to `[start, end)`: a finite, sorted, merged list of half-open `{ start: Date, end: Date }` intervals. |
 | `next(after, opts?)` | The first **maximal** covered interval starting strictly after `after` (coverage containing `after` is skipped). `null` when nothing starts before the year-9999 horizon: the coverage is exhausted, or it is continuous from `after` on (`E1:7` covers every instant, so nothing ever *starts*); neither means "never applies", `covers(after)` says whether it applies now. |
@@ -94,8 +101,10 @@ parse('D25 M12').toRRule();
 
 ### Inputs & Options
 
-- **Instants** (`DateInput`): `Date`, epoch milliseconds, ISO 8601 string, or any Temporal-like object exposing `epochMilliseconds` (no Temporal dependency).
-- **`opts.tz`**: IANA time zone for evaluation, default `'UTC'`. The zone is always an **evaluation parameter**, never part of the expression; `T0900:1800` means local business hours wherever you evaluate it. DST is handled per [spec §9.3](https://github.com/DTRExp/dtrexp/blob/main/spec.md#93-dst-and-local-time): spring-forward gap times cover nothing; repeated fall-back times are covered on both passes. `intersect()` and `next()` return exactly the instants `covers()` accepts, transition days included: a clock time inside a gap yields no interval, a repeated one yields two.
+- **Instants** (`DateInput`): `Date`, epoch milliseconds, ISO 8601 string, or any Temporal-like object exposing `epochMilliseconds` (no Temporal dependency). A date-time string without `Z` or an offset (`'2026-07-07T09:30:00'`) is read in the **host's** zone, as `Date.parse` reads it, not in the evaluation zone; give strings an offset. A later major version will reject them.
+- **`opts.tz`**: IANA time zone for evaluation; default the bound `zone` (`withZone()`), else `'UTC'`. Pass it as `{ tz }`; a bare string throws `TypeError`, and an unknown zone throws `RangeError`. The zone is always an **evaluation parameter**, never part of the expression; `T0900:1800` means local business hours wherever you evaluate it. DST is handled per [spec §9.3](https://github.com/DTRExp/dtrexp/blob/main/spec.md#93-dst-and-local-time): spring-forward gap times cover nothing; repeated fall-back times are covered on both passes. `intersect()` and `next()` return exactly the instants `covers()` accepts, transition days included: a clock time inside a gap yields no interval, a repeated one yields two.
+
+**Which to use:** bind the zone with `withZone()` when it belongs to what the expression describes (a store's hours, a venue's schedule), and pass `{ tz }` per call when it belongs to whoever is asking (a rule shown to each user in their own zone). A bound copy shares its `source` with the original, so a cache of parsed expressions keys on `source` and `zone` together.
 
 ## Expression Syntax (spec draft 2.9)
 

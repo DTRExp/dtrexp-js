@@ -28,23 +28,50 @@ export class DTRExp {
    *  doesn't lose them. Empty for a clean expression.
    */
   readonly warnings: readonly IIssue[];
+  /**
+   *  The bound evaluation zone, in the platform's canonical form, or `undefined`
+   *  when none is bound (then evaluation defaults to `'UTC'`). Set with
+   *  {@link DTRExp.withZone}; a `{ tz }` passed to a call still wins.
+   */
+  readonly zone: string | undefined;
   private readonly ir: IDTRExpIR;
 
-  private constructor(source: string, ir: IDTRExpIR, warnings: readonly IIssue[]) {
+  private constructor(
+    source: string,
+    ir: IDTRExpIR,
+    warnings: readonly IIssue[],
+    zone: string | undefined
+  ) {
     this.source = source;
     this.ir = ir;
     this.warnings = warnings;
+    this.zone = zone;
     Object.freeze(this);
   }
 
   /** @internal Used by {@link parse} — not part of the public API. */
   static _create(source: string, ir: IDTRExpIR, warnings: readonly IIssue[]): DTRExp {
-    return new DTRExp(source, ir, warnings);
+    return new DTRExp(source, ir, warnings, undefined);
   }
 
   /**
-   *  Whether the expression covers the given instant, evaluated in `opts.tz`
-   *  (default `'UTC'`).
+   *  A copy of this expression whose evaluation defaults to `tz`; this one is
+   *  left as it is. The copy has the same `source`, canonical form, description,
+   *  RRULE and warnings: the zone belongs to evaluation, never to the expression.
+   *  A `{ tz }` passed to a call still wins. Throws `RangeError` at once on an
+   *  unknown zone.
+   *
+   *  @example
+   *  const hours = parse('T0900:1800 E1:5').withZone('Europe/Berlin');
+   *  hours.covers(new Date()); // evaluated in Berlin
+   */
+  withZone(tz: string): DTRExp {
+    return new DTRExp(this.source, this.ir, this.warnings, resolveZone(tz));
+  }
+
+  /**
+   *  Whether the expression covers the given instant, evaluated in `opts.tz`,
+   *  else the bound {@link DTRExp.zone}, else `'UTC'`.
    *
    *  @example
    *  parse('T0900:1800 E1:5').covers(new Date(), { tz: 'Europe/Berlin' });
@@ -128,13 +155,13 @@ export class DTRExp {
     return this.ir;
   }
 
-  /** The zone a call evaluates in: its own `{ tz }`, else UTC. */
+  /** The zone a call evaluates in: its own `{ tz }`, else the bound zone, else UTC. */
   private zoneFor(opts: IEvalOptions | undefined): string {
     if (typeof opts === 'string') {
       throw new TypeError(`Pass the time zone as { tz: '${opts}' }`);
     }
     const tz = opts?.tz;
-    return tz === undefined ? 'UTC' : resolveZone(tz);
+    return tz === undefined ? (this.zone ?? 'UTC') : resolveZone(tz);
   }
 }
 
