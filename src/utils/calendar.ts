@@ -154,6 +154,30 @@ export function fieldsFromCivil(year: number, month: number, day: number): IFiel
   return buildFields(year, month, day, 0, 0, 0, 0);
 }
 
+const zoneNames = new Map<string, string>();
+
+/**
+ *  The canonical name of an IANA zone as the platform resolves it (`'utc'`,
+ *  `'Etc/UTC'` and `'GMT'` → `'UTC'`; `'europe/berlin'` → `'Europe/Berlin'`), so
+ *  every alias of UTC takes the fast path and one zone fills one cache entry.
+ *  Throws `RangeError` on a zone the platform does not know.
+ */
+export function resolveZone(tz: string): string {
+  // Stryker disable next-line all: 'UTC' fast path is a pure optimization — Intl resolves 'UTC' to itself
+  if (tz === 'UTC') return tz;
+  let name = zoneNames.get(tz);
+  // Stryker disable next-line ConditionalExpression: cache is a pure optimization — resolving again yields the same name
+  if (name === undefined) {
+    try {
+      name = new Intl.DateTimeFormat('en-US', { timeZone: tz }).resolvedOptions().timeZone;
+    } catch {
+      throw new RangeError(`Unknown time zone: "${tz}"`);
+    }
+    zoneNames.set(tz, name);
+  }
+  return name;
+}
+
 const formatterCache = new Map<string, Intl.DateTimeFormat>();
 
 function formatterFor(tz: string): Intl.DateTimeFormat {

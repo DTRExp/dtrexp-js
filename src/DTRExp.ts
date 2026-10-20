@@ -13,6 +13,7 @@ import type {
   IIssue,
   IValidationResult
 } from './types/index.js';
+import { resolveZone } from './utils/calendar.js';
 
 /**
  *  A parsed, immutable DTRExp. Construct via {@link parse}; parse once
@@ -33,6 +34,7 @@ export class DTRExp {
     this.source = source;
     this.ir = ir;
     this.warnings = warnings;
+    Object.freeze(this);
   }
 
   /** @internal Used by {@link parse} — not part of the public API. */
@@ -48,7 +50,7 @@ export class DTRExp {
    *  parse('T0900:1800 E1:5').covers(new Date(), { tz: 'Europe/Berlin' });
    */
   covers(instant: DateInput, opts?: IEvalOptions): boolean {
-    return coversInstant(this.ir, toEpochMs(instant), opts?.tz ?? 'UTC');
+    return coversInstant(this.ir, toEpochMs(instant), this.zoneFor(opts));
   }
 
   /**
@@ -60,7 +62,7 @@ export class DTRExp {
    *  // → [ { start: 2017-03-01T00:00:00Z, end: 2017-04-01T00:00:00Z } ]
    */
   intersect(start: DateInput, end: DateInput, opts?: IEvalOptions): IInterval[] {
-    return intersectWindow(this.ir, toEpochMs(start), toEpochMs(end), opts?.tz ?? 'UTC');
+    return intersectWindow(this.ir, toEpochMs(start), toEpochMs(end), this.zoneFor(opts));
   }
 
   /**
@@ -77,7 +79,7 @@ export class DTRExp {
    *  // → { start: 2026-07-08T09:00:00Z, end: 2026-07-08T18:00:00Z }
    */
   next(after: DateInput, opts?: IEvalOptions): IInterval | null {
-    return nextInterval(this.ir, toEpochMs(after), opts?.tz ?? 'UTC');
+    return nextInterval(this.ir, toEpochMs(after), this.zoneFor(opts));
   }
 
   /**
@@ -92,7 +94,7 @@ export class DTRExp {
    *  // → { start: 2026-07-07T09:00:00Z, end: 2026-07-07T18:00:00Z }
    */
   covering(instant: DateInput, opts?: IEvalOptions): IInterval | null {
-    return coveringInterval(this.ir, toEpochMs(instant), opts?.tz ?? 'UTC');
+    return coveringInterval(this.ir, toEpochMs(instant), this.zoneFor(opts));
   }
 
   /**
@@ -125,6 +127,15 @@ export class DTRExp {
   get _ir(): IDTRExpIR {
     return this.ir;
   }
+
+  /** The zone a call evaluates in: its own `{ tz }`, else UTC. */
+  private zoneFor(opts: IEvalOptions | undefined): string {
+    if (typeof opts === 'string') {
+      throw new TypeError(`Pass the time zone as { tz: '${opts}' }`);
+    }
+    const tz = opts?.tz;
+    return tz === undefined ? 'UTC' : resolveZone(tz);
+  }
 }
 
 /**
@@ -136,7 +147,7 @@ export class DTRExp {
  */
 export function parse(expression: string): DTRExp {
   const { ir, warnings } = parseToIR(expression);
-  return DTRExp._create(expression, ir, warnings);
+  return DTRExp._create(expression, deepFreeze(ir), deepFreeze(warnings));
 }
 
 /**
@@ -155,6 +166,14 @@ export function validate(expression: string): IValidationResult {
     const issue: IIssue = { code: e.code, message: e.message, position: e.position };
     return { valid: false, errors: [issue], warnings: [] };
   }
+}
+
+/** Freezes a plain object or array and everything it holds. */
+function deepFreeze<T>(value: T): T {
+  for (const child of Object.values(value as object)) {
+    if (typeof child === 'object' && child !== null) deepFreeze(child);
+  }
+  return Object.freeze(value);
 }
 
 function toEpochMs(input: DateInput): number {
