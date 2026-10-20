@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- Fixed an issue where the zone-name cache, keyed on the name as given, grew without bound when callers passed many spellings of a zone (`'europe/berlin'`, `'EUROPE/BERLIN'`, …). It is cleared after 4096 names.
+- Fixed an issue where `validate()` returned warnings that could be changed, while `parse()` froze the same warnings. Both are frozen now.
+
+### Changed
+
+- The README names both vector files the suite runs, and says that a fixed-offset zone such as `'+01:00'` works where the runtime's `Intl` accepts it.
+
 ## 1.2.0 — 2026-10-20
 
 ### Added

@@ -188,7 +188,7 @@ export function parse(expression: string): DTRExp {
 export function validate(expression: string): IValidationResult {
   try {
     const { warnings } = parseToIR(expression);
-    return { valid: true, errors: [], warnings };
+    return { valid: true, errors: [], warnings: deepFreeze(warnings) };
   } catch (err) {
     const e = err as DTRExpSyntaxError;
     const issue: IIssue = { code: e.code, message: e.message, position: e.position };

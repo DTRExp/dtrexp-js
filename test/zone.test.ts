@@ -1,5 +1,6 @@
 import type { DTRExp, IEvalOptions } from '../src/index.js';
-import { parse } from '../src/index.js';
+import { parse, validate } from '../src/index.js';
+import { ZONE_NAME_CAP } from '../src/utils/calendar.js';
 
 // Tuesday 07:30 UTC is 09:30 in Berlin (CEST): inside 09:00–18:00 there, outside it in UTC.
 const HOURS = 'T0900:1800 E1:5';
@@ -111,6 +112,25 @@ describe('withZone()', () => {
   });
 });
 
+describe('zone-name cache', () => {
+  it('keeps answering correctly after the cap clears it', () => {
+    const dtr = parse(HOURS);
+    // Each case variant fills an entry of its own; 2 × 4096 of them pass the cap.
+    const variants = (name: string) => {
+      const letters = [...name].filter((c) => c !== '/').length;
+      return Array.from({ length: 2 ** letters }, (_, i) => {
+        let k = 0;
+        return [...name].map((c) => (c !== '/' && (i >> k++) & 1 ? c.toUpperCase() : c)).join('');
+      });
+    };
+    const names = [...variants('europe/berlin'), ...variants('europe/london')];
+    expect(names.length).toBeGreaterThan(ZONE_NAME_CAP);
+    for (const tz of names)
+      expect(dtr.covers(T, { tz })).toBe(tz.toLowerCase() === 'europe/berlin');
+    expect(dtr.withZone('EUROPE/BERLIN').zone).toBe('Europe/Berlin');
+  });
+});
+
 describe('immutability', () => {
   const dtr = parse('D30 M2');
 
@@ -120,6 +140,12 @@ describe('immutability', () => {
     expect(() => {
       (dtr as { zone: string | undefined }).zone = 'Europe/Berlin';
     }).toThrow(TypeError);
+  });
+
+  it('freezes the warnings validate() returns, as parse() does', () => {
+    const { warnings } = validate('D30 M2');
+    expect(Object.isFrozen(warnings)).toBe(true);
+    expect(Object.isFrozen(warnings[0])).toBe(true);
   });
 
   it('freezes the warnings and the compiled IR all the way down', () => {

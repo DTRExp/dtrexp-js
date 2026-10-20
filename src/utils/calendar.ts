@@ -155,6 +155,8 @@ export function fieldsFromCivil(year: number, month: number, day: number): IFiel
 }
 
 const zoneNames = new Map<string, string>();
+/** Names kept before the cache is cleared; it is keyed on input, which a caller may vary without end. */
+export const ZONE_NAME_CAP = 4096;
 
 /**
  *  The canonical name of an IANA zone as the platform resolves it (`'utc'`,
@@ -177,6 +179,8 @@ export function resolveZone(tz: string): string {
     } catch {
       throw new RangeError(`Unknown time zone: "${tz}"`);
     }
+    // Stryker disable next-line all: the bound is memory hygiene — resolving again yields the same name
+    if (zoneNames.size >= ZONE_NAME_CAP) zoneNames.clear();
     zoneNames.set(tz, name);
   }
   return name;
