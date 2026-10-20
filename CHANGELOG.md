@@ -6,18 +6,18 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Added
 
-- `withZone(tz)`: a copy of the expression whose evaluation defaults to `tz`, so code that evaluates one expression in one zone stops passing `{ tz }` to every call. The original is left as it is, and the copy's `source`, canonical form, description, RRULE and warnings are the same. A `{ tz }` passed to a call still wins. The zone is checked at once and stored in its canonical form, readable as `zone`.
+- `withZone(tz)`: a copy of the expression whose evaluation defaults to `tz`, so code that evaluates one expression in one zone stops passing `{ tz }` to every call. The original is left as it is, and the copy's `source`, canonical form, description, RRULE and warnings are the same. A `{ tz }` passed to a call still wins. The zone is checked at once and stored as the platform names it, readable as `zone`; a missing zone (`withZone(undefined)`) throws `TypeError` rather than binding the host's zone.
 
 ### Fixed
 
 - Fixed an issue where a bare zone string in the options slot, `covers(t, 'Europe/Berlin')`, was ignored and the call evaluated in UTC. It throws `TypeError` now; pass `{ tz: 'Europe/Berlin' }`.
 - Fixed an issue where `intersect()` on an empty or reversed window returned `[]` without checking its zone, so an unknown zone went unnoticed there. Every call checks its zone first.
-- An unknown zone throws `RangeError: Unknown time zone: "…"` instead of the platform's own message.
 - Fixed an issue where `'utc'`, `'Etc/UTC'`, `'GMT'` and the other UTC aliases missed the UTC fast path (about 10 times slower), and where case variants of one zone filled separate cache entries. Zone names are canonicalized before use.
-- `DTRExp` instances, their `warnings` and the compiled expression are frozen, so the immutability the docs promise holds at runtime too; the internal `_create` and `_ir` members are no longer in the published type declarations.
 
 ### Changed
 
+- `DTRExp` instances, their `warnings` and the compiled expression are frozen, so the immutability the docs and types promise holds at runtime too. Code that wrote to an instance or pushed to its `warnings` throws `TypeError` now (in strict mode, which every ES module is). The internal `_create` and `_ir` members are no longer in the published type declarations.
+- An unknown zone throws `RangeError: Unknown time zone: "…"` instead of the platform's own message; code that matched the old message has to match the new one.
 - The README documents that a date-time string without `Z` or an offset is read in the host's zone, not the evaluation zone.
 
 ## 1.1.0 — 2026-09-11

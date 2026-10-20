@@ -28,6 +28,16 @@ describe('evaluation zone — per call', () => {
     expect(() => dtr.covers(T, { tz: '' })).toThrow(new RangeError('Unknown time zone: ""'));
   });
 
+  it('reads a null zone as no zone, as 1.1.0 did, and rejects a zone that is not a string', () => {
+    const tz = null as unknown as string;
+    expect(dtr.covers(T, { tz })).toBe(false); // UTC
+    expect(dtr.withZone('Europe/Berlin').covers(T, { tz })).toBe(true); // the bound zone
+    const num = { tz: 42 as unknown as string };
+    expect(() => dtr.covers(T, num)).toThrow(
+      new TypeError('Expected a time zone name, got number')
+    );
+  });
+
   it('reads UTC aliases and case variants as the zone they name', () => {
     for (const tz of ['utc', 'Etc/UTC', 'GMT']) expect(dtr.covers(T, { tz })).toBe(false);
     expect(dtr.covers(T, { tz: 'europe/berlin' })).toBe(true);
@@ -77,6 +87,12 @@ describe('withZone()', () => {
     expect(() => dtr.withZone('Mars/Olympus')).toThrow(
       new RangeError('Unknown time zone: "Mars/Olympus"')
     );
+  });
+
+  it('refuses a missing zone instead of binding the host zone', () => {
+    const none = (v: unknown) => () => dtr.withZone(v as string);
+    expect(none(undefined)).toThrow(new TypeError('Expected a time zone name, got undefined'));
+    expect(none(null)).toThrow(new TypeError('Expected a time zone name, got null'));
   });
 
   it('leaves everything about the expression itself unchanged', () => {

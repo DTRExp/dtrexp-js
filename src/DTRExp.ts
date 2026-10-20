@@ -59,7 +59,7 @@ export class DTRExp {
    *  left as it is. The copy has the same `source`, canonical form, description,
    *  RRULE and warnings: the zone belongs to evaluation, never to the expression.
    *  A `{ tz }` passed to a call still wins. Throws `RangeError` at once on an
-   *  unknown zone.
+   *  unknown zone, and `TypeError` when `tz` is not a string.
    *
    *  @example
    *  const hours = parse('T0900:1800 E1:5').withZone('Europe/Berlin');
@@ -160,8 +160,9 @@ export class DTRExp {
     if (typeof opts === 'string') {
       throw new TypeError(`Pass the time zone as { tz: '${opts}' }`);
     }
+    // `null` from JSON or a database means no zone, as it did in 1.1.0
     const tz = opts?.tz;
-    return tz === undefined ? (this.zone ?? 'UTC') : resolveZone(tz);
+    return tz == null ? (this.zone ?? 'UTC') : resolveZone(tz);
   }
 }
 
@@ -195,7 +196,7 @@ export function validate(expression: string): IValidationResult {
   }
 }
 
-/** Freezes a plain object or array and everything it holds. */
+/** Freezes a plain object or array and everything it holds. The IR has no cycles and no typed arrays. */
 function deepFreeze<T>(value: T): T {
   for (const child of Object.values(value as object)) {
     if (typeof child === 'object' && child !== null) deepFreeze(child);

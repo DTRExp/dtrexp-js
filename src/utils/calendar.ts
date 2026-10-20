@@ -160,9 +160,13 @@ const zoneNames = new Map<string, string>();
  *  The canonical name of an IANA zone as the platform resolves it (`'utc'`,
  *  `'Etc/UTC'` and `'GMT'` → `'UTC'`; `'europe/berlin'` → `'Europe/Berlin'`), so
  *  every alias of UTC takes the fast path and one zone fills one cache entry.
- *  Throws `RangeError` on a zone the platform does not know.
+ *  Throws `RangeError` on a zone the platform does not know, and `TypeError` on
+ *  anything but a string (`Intl` would read `undefined` as the host's zone).
  */
 export function resolveZone(tz: string): string {
+  if (typeof tz !== 'string') {
+    throw new TypeError(`Expected a time zone name, got ${tz === null ? 'null' : typeof tz}`);
+  }
   // Stryker disable next-line all: 'UTC' fast path is a pure optimization — Intl resolves 'UTC' to itself
   if (tz === 'UTC') return tz;
   let name = zoneNames.get(tz);
