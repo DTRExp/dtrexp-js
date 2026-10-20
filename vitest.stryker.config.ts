@@ -1,7 +1,6 @@
 import { defineConfig } from 'vitest/config';
 
-// Config used only by Stryker mutation runs. It excludes the seeded property
-// fuzzer (test/invariants.test.ts) and the domain-edge scans
+// Config used only by Stryker mutation runs. It excludes the domain-edge scans
 // (test/horizon.test.ts, plus the extended vectors that scan to the horizon,
 // skipped via DTREXP_SKIP_HORIZON): under per-test mutation instrumentation
 // they would be re-executed for every mutant, which is prohibitively slow and
@@ -14,6 +13,6 @@ export default defineConfig({
     testTimeout: 30000,
     include: ['test/**/*.{test,spec}.ts'],
     env: { DTREXP_SKIP_HORIZON: '1' },
-    exclude: ['test/invariants.test.ts', 'test/horizon.test.ts', 'node_modules/**']
+    exclude: ['test/horizon.test.ts', 'node_modules/**']
   }
 });
