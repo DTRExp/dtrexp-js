@@ -93,7 +93,7 @@ const cases: Array<[string, string, number]> = [
   ['E7#-6', 'ordinal-range', 3], // an ordinal's sign belongs to its token
   ['E7#-0', 'ordinal-zero', 3],
   ['M-', 'expected-value', 2],
-  ['M*,5', 'star-in-list', 1],
+  ['M*,5', 'star-in-list', 2], // a leading bare star is a whole selector: the ',' cannot follow
   ['M!1,*', 'star-in-exclusion', 4],
   ['M!*/2', 'star-in-exclusion', 2],
   // the integer limit, in every place an integer stands; a value's token begins at its sign

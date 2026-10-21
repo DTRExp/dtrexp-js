@@ -234,10 +234,11 @@ class Parser {
       );
     }
     if (bare && items.length > 1) {
+      // a leading bare `*` is a whole selector, so it is the `,` after it that cannot follow
       this.fail(
         'star-in-list',
         `Bare '*' cannot appear in a list — '${unit}*' already covers the domain`,
-        bare.at.start
+        bare === items[0] ? bare.at.start + 1 : bare.at.start
       );
     }
 
