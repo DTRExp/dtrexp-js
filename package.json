@@ -32,7 +32,10 @@
     "mutation": "stryker run",
     "prepublishOnly": "npm run build"
   },
-  "repository": "DTRExp/dtrexp-js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DTRExp/dtrexp-js.git"
+  },
   "homepage": "https://dtrexp.org",
   "bugs": {
     "url": "https://github.com/DTRExp/dtrexp-js/issues"
