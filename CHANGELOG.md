@@ -27,6 +27,8 @@ All notable changes to this project will be documented in this file. The format 
 
 - Targets spec draft 3: `SPEC_DRAFT` is `3`, and the suite runs the draft 3 vectors, checking the error position of every rejected expression.
 - Error positions follow spec §8: a syntax error points at the first character of the token at fault. A value out of its domain points at the value (`M13` at 1, not 0), a bad stride or cadence count at that count (`M3/14` at 3), a stride on a wrap range at its `/`, a backwards range at its end, and a malformed date literal at its first digit. Code that reads `position` gets a different number for these.
+- A time value's malformed fraction points at its `.` (`T090000.5` at 7), and an empty expression or union branch at the end of its spaces (`' '` at 1, `M3 | | M5` at 5).
+- When more than one thing is wrong, the error is the one with the earliest position, a grammar error included: `M11:2/1` is at 5 (the stride on a wrap, before its interval of 1), and `M13 X` at 1 (the value, before the stray `X`). A value's domain is checked as the value is read, except a `D` value's, which waits for the scope the rest of the branch sets: `D40 X` is at 4, `D40 M13` at 1.
 - A zone must be a tz database zone or link name, in any case. A fixed offset (`'+02:00'`), ICU's legacy IDs (`'PST'`, `'IST'`), `SystemV/…` names and names the tz database has removed (`'US/Pacific-New'`) throw `RangeError` now, as an unknown zone does.
 - `M!*` and a bare `*` in an exclusion list throw with the code `star-in-exclusion`.
 - The unsatisfiability warnings have new messages, one per expression.

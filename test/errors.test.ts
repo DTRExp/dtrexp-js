@@ -14,7 +14,8 @@ const cases: Array<[string, string, number]> = [
   ['M-0', 'bad-value', 1],
   ['T1200:1200', 'empty-time-range', 6],
   ['T123', 'bad-time-value', 1],
-  ['T093015.25', 'bad-time-value', 1],
+  ['T093015.25', 'bad-time-value', 7], // the fraction is its own token
+  ['T093015.', 'bad-time-value', 7],
   ['T2400', 'bad-time-value', 1],
   ['T120060', 'bad-time-value', 1],
   ['*20180101', 'bad-bounds', 1],
@@ -30,6 +31,43 @@ const cases: Array<[string, string, number]> = [
   ['Y2030:2020', 'backwards-range', 6],
   ['Y2030:2020/2', 'backwards-range', 6], // the range is wrong before its stride
   ['M11:2/2', 'stride-on-wrap', 5],
+  ['M11:2/1', 'stride-on-wrap', 5], // the wrap comes before its interval
+  // the earliest error wins: a rule error reads on to the end of its branch (spec §8)
+  ['M13,X', 'out-of-domain', 1], // before the selector is complete
+  ['Y2020:2019,X', 'backwards-range', 6],
+  ['M-0 X', 'bad-value', 1],
+  ['E7#0 X', 'ordinal-zero', 3],
+  ['M1/1 X', 'stride-interval-min', 3],
+  ['M1/3/3 X', 'stride-duration', 5],
+  ['H22:0/2 X', 'stride-on-wrap', 5],
+  ['Y*/3 X', 'anchorless-stride', 2],
+  ['T25 X', 'bad-time-value', 1],
+  ['T0900:0900,X', 'empty-time-range', 6],
+  ['20230229 X', 'bad-date-literal', 0],
+  ['20200101/0D X', 'zero-cadence-period', 9],
+  ['20200101/2D/3D X', 'cadence-duration', 12],
+  ['20200101/1D/1M X', 'cadence-duration-unit', 12],
+  ['20180301:20170301 X', 'backwards-bounds', 9],
+  ['20200101 20200102 X', 'duplicate-bounds', 9],
+  ['20200101/2D 20200101/2D X', 'duplicate-cadence', 12],
+  ['T09 T10 X', 'duplicate-designator', 4],
+  ['M2147483648 X', 'integer-limit', 1],
+  // D's domain waits for its scope: a grammar error first wins, a complete branch competes
+  ['D40 M3/1', 'out-of-domain', 1],
+  ['D40 20230229', 'out-of-domain', 1],
+  ['D2/40 X', 'unexpected-char', 6],
+  ['D2/40 M1', 'stride-interval-domain', 3],
+  ['D1:40 Q1 M13', 'out-of-domain', 3],
+  ['D0 X', 'unexpected-char', 3], // even where no scope could hold the value
+  ['D-0 X', 'bad-value', 1], // '-0' is no value in any domain, so it does not wait
+  ['D40 M*5', 'out-of-domain', 1], // the '*' completes M, and the 5 is a malformed date literal
+  ['M11:2/3/3', 'stride-on-wrap', 5], // and before its duration
+  ['H22:0/1', 'stride-on-wrap', 5], // a literal 0 end wraps
+  ['M13:2/1', 'out-of-domain', 1], // a wrap's values are checked before the wrap
+  ['Y2030:2020/1', 'backwards-range', 6],
+  ['M3:*/1', 'stride-interval-min', 5], // an open end never wraps
+  ['D5:-1/1', 'stride-interval-min', 6], // nor does a negative end
+  ['D5:-1/3/3', 'stride-duration', 8],
   ['20180001', 'bad-date-literal', 0], // month 0
   ['20181301', 'bad-date-literal', 0], // month 13
   ['20180100', 'bad-date-literal', 0], // day 0
@@ -357,5 +395,15 @@ describe('parser: forms at the edges of the draft 3 rules that must parse', () =
   it('strides a range whose end is 0 only when it does not wrap', () => {
     expect(() => parse('H0:0/2')).not.toThrow();
     expect(() => parse('D2:-1/5')).not.toThrow(); // a negative end clips, never wraps
+  });
+
+  it('names D in its deferred domain errors', () => {
+    expect(validate('D40').errors[0]?.message).toContain("Value 40 out of domain for 'D'");
+    expect(validate('D2/40 M1').errors[0]?.message).toContain("exceeds the 'D' domain");
+  });
+
+  it('takes a Y range whose end equals its start', () => {
+    expect(() => parse('Y2020:2020')).not.toThrow();
+    expect(() => parse('Y2020:2020/2')).not.toThrow();
   });
 });
