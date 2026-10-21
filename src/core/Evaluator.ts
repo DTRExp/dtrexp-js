@@ -1,7 +1,6 @@
 import type {
   IBounds,
   ICadence,
-  IDateLiteral,
   IDTRExpIR,
   IExpressionIR,
   IFields,
@@ -20,7 +19,9 @@ import {
   monthsBetween,
   weeksInIsoYear
 } from '../utils/index.js';
-import { literalPseudo } from './Parser.js';
+import { literalPseudo, literalSpanEnd } from './Parser.js';
+
+export { literalSpanEnd };
 
 const MS_PER_DAY = 86_400_000;
 
@@ -180,13 +181,6 @@ function matchOrdinal(ordinal: number, f: IFields, present: Set<Unit>): boolean 
 // -------------------------------
 // bounds
 // -------------------------------
-
-/** End of a literal's span, exclusive: whole day, or minute/second with a T-part (spec §6). */
-export function literalSpanEnd(literal: IDateLiteral): number {
-  const spanMs =
-    literal.hour === undefined ? MS_PER_DAY : literal.second === undefined ? 60_000 : 1000;
-  return literalPseudo(literal) + spanMs;
-}
 
 /** The absolute window of a bounds component, in local pseudo-epoch; open ends are ±Infinity. */
 export function boundsPseudoWindow(bounds: IBounds): { lo: number; hi: number } {

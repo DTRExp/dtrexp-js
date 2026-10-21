@@ -1,4 +1,6 @@
+import { selectedValues } from '../src/core/Parser.js';
 import { DTRExp, parse, validate } from '../src/index.js';
+import type { ISelector, ISpan, Unit } from '../src/types/index.js';
 
 describe('DTRExp#warnings', () => {
   it('is empty for a clean expression', () => {
@@ -58,10 +60,11 @@ describe('validate()', () => {
     expect(validate('D366 Y2020:*').warnings).toEqual([]); // open span — statically undecidable
     expect(validate('D366 Y1000:3000').warnings).toEqual([]); // too wide to scan
     expect(validate('D366,1 Y2021').warnings).toEqual([]); // D1 always exists
-    expect(validate('D!366 Y2021').warnings).toEqual([]); // exclusions are skipped
+    expect(validate('D!366 Y2021').warnings).toEqual([]); // the complement keeps days 1–365
     expect(validate('D*:5 Y2021').warnings).toEqual([]); // a star start resolves to day 1
     expect(validate('D366 W1 Y2025').warnings).toEqual([]); // Y is the week-year here — Dec 31 2024 is day 366 inside it
-    expect(validate('D366 Y2021/2').warnings).toEqual([]); // strides are skipped
+    expect(validate('D366 Y2021/2').warnings[0]?.code).toBe('unsatisfiable'); // odd years are never leap years
+    expect(validate('D366 Y2020/4').warnings).toEqual([]); // an open stride still names its years
   });
 
   it('treats a zero end as an ordinary wrap endpoint on 0-based domains', () => {
@@ -84,8 +87,8 @@ describe('validate()', () => {
     expect(validate('M-1 Q4').warnings).toEqual([]);
     expect(validate('M11:2 Q1').warnings).toEqual([]); // wrap reaches Jan–Feb
     expect(validate('M* Q2').warnings).toEqual([]);
-    expect(validate('M!3 Q1').warnings).toEqual([]); // exclusions are skipped
-    expect(validate('M1/3 Q2').warnings).toEqual([]); // strides are skipped
+    expect(validate('M!3 Q1').warnings).toEqual([]); // the complement keeps January and February
+    expect(validate('M1/3 Q2').warnings).toEqual([]); // the stride selects April
   });
 
   it('reports errors without throwing', () => {
@@ -155,6 +158,36 @@ describe('covers() — instant input forms', () => {
       /Invalid instant/
     );
   });
+
+  it('rejects a string instant that is not a real date-time instead of rolling it over', () => {
+    const all = parse('E1:7');
+    for (const s of [
+      '2020-02-30T00:00:00Z',
+      '2021-02-29T00:00:00Z',
+      '2020-04-31',
+      '2020-01-01T24:00:00Z',
+      '2020-01-01 24:00:00Z',
+      '+002021-02-29T00:00:00Z',
+      ' 2020-02-30',
+      'Tue 2020-02-30',
+      '2100-02-29T00:00:00Z' // not a leap year
+    ]) {
+      expect(() => all.covers(s)).toThrow(
+        new TypeError(`Invalid instant: '${s}' is not a real date-time`)
+      );
+    }
+    // the last day of each month, a leap day, the last hour and an extended year stay real
+    for (const s of [
+      '2020-02-29T00:00:00Z',
+      '2021-02-28T23:59:59Z',
+      '2020-04-30',
+      '2020-12-31T23:00:00+02:00',
+      '+002020-01-31T00:00:00Z',
+      '2000-02-29T00:00:00Z'
+    ]) {
+      expect(all.covers(s)).toBe(true);
+    }
+  });
 });
 
 describe('describe() — locale guard', () => {
@@ -186,7 +219,8 @@ describe('validate() — inverted-range warnings across every unit scope', () =>
     'M-2:10',
     'E5 W53 Y2021',
     'E1 M-1 Q1',
-    'E1 D30 M2'
+    'E1 D30 M2',
+    'W53:* Y2021'
   ];
   for (const e of warns) {
     it(`warns on '${e}'`, () => {
@@ -202,7 +236,6 @@ describe('validate() — inverted-range warnings across every unit scope', () =>
     'H22:*',
     'D-7:*',
     'W1:53 Y2021',
-    'W53:* Y2021',
     'W53 Y2021:2026',
     'M-3 Q4',
     'M4 Q2',
@@ -222,9 +255,110 @@ describe('validate() — inverted-range warnings across every unit scope', () =>
   }
 
   it('carries a meaningful message on every lint', () => {
-    expect(validate('M-2:2').warnings[0]?.message).toMatch(/backwards/);
-    expect(validate('W53 Y2021').warnings[0]?.message).toMatch(/Week 53/);
+    expect(validate('M-2:2').warnings[0]?.message).toMatch(/'M' selects no value/);
+    expect(validate('W53 Y2021').warnings[0]?.message).toMatch(/week\(s\) never occur/);
     expect(validate('M-1 Q1').warnings[0]?.message).toMatch(/quarter/);
-    expect(validate('D30 M2').warnings[0]?.message).toMatch(/Day 30/);
+    expect(validate('D30 M2').warnings[0]?.message).toMatch(/day\(s\) never occur/);
+    expect(validate('D30 M2').warnings[0]?.message).toMatch(/covers nothing$/);
+  });
+});
+
+describe('validate() — the §9.1 required minimum as value-set emptiness', () => {
+  const warnsAt: Array<[string, number]> = [
+    ['H!0:23', 0], // full-domain exclusions on every fixed domain
+    ['Q!*:*', 0],
+    ['s!0:59', 0],
+    ['E7 M!1:12', 3],
+    ['Q2 M!4:6', 3], // the months left all fall outside Q2
+    ['M1:9/3 Q4', 0], // the stride selects 1, 4 and 7
+    ['M!*:* Q1', 0], // a dead M warns as itself, before M ∩ Q
+    ['D92 Q2', 0], // Q2 has 91 days
+    ['D-92 Q1', 0],
+    ['D31 M4,6,7 Q2', 0], // M ∩ Q leaves April and June
+    ['D31:*/2 M4,6', 0],
+    ['D366 Y2021:2022', 0],
+    ['D366 Y9997:*', 0], // an open span still names its years: 9997–9999 are common
+    ['W53 Y2021:2025/2', 0],
+    ['Y2021 W53', 6], // the warning names the dead selector
+    ['M3 | D30 M2', 5],
+    ['H!*:* M!1:12', 0] // one warning per expression
+  ];
+  for (const [e, position] of warnsAt) {
+    it(`warns on '${e}' at ${position}`, () => {
+      const { valid, warnings } = validate(e);
+      expect(valid).toBe(true);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatchObject({ code: 'unsatisfiable', position });
+    });
+  }
+
+  it('stays quiet on the longest day of every month and quarter', () => {
+    const longest = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    longest.forEach((day, i) => {
+      expect(validate(`D${day} M${i + 1}`).warnings).toEqual([]);
+    });
+    [91, 91, 92, 92].forEach((day, i) => {
+      expect(validate(`D${day} Q${i + 1}`).warnings).toEqual([]);
+    });
+  });
+
+  const quiet = [
+    'M2:5/3 Q2', // the stride selects May
+    'M1:12/3 Q4', // and October
+    'D92 Q3',
+    'D91 Q1', // a leap Q1
+    'D-91 Q1',
+    'D92 Q1,3',
+    'D31 M4:7 Q2', // May
+    'D29:31/5 M2', // a leap February
+    'D366 Y2020,2021',
+    'D366 Y!2020', // the complement holds leap years
+    'W53 Y!2020',
+    'W53 Y2015:*/11', // 2015 has 53 weeks
+    'D366 W1 Y2021', // W makes Y the week-year; day-of-year stays calendar
+    'D366 W* Y2021'
+  ];
+  for (const e of quiet) {
+    it(`stays quiet on '${e}'`, () => {
+      expect(validate(e)).toEqual({ valid: true, errors: [], warnings: [] });
+    });
+  }
+});
+
+describe('selectedValues()', () => {
+  const sel = (unit: Unit, spans: ISpan[], extra: Partial<ISelector> = {}): ISelector => ({
+    unit,
+    exclude: false,
+    spans,
+    ...extra
+  });
+
+  it('resolves negatives and `*` against the instance', () => {
+    expect(selectedValues(sel('D', [{ start: -3, end: null }]), 28)).toEqual([26, 27, 28]);
+    expect(selectedValues(sel('D', [{ start: null, end: 2 }]), 28)).toEqual([1, 2]);
+    expect(selectedValues(sel('D', [{ start: 30, end: 30 }]), 29)).toEqual([]);
+    expect(selectedValues(sel('D', [{ start: -30, end: -30 }]), 29)).toEqual([]);
+    expect(selectedValues(sel('D', [{ start: -1, end: -2 }]), 31)).toEqual([]);
+    expect(selectedValues(sel('H', [{ start: -1, end: -1 }]), 23)).toEqual([23]);
+  });
+
+  it('expands a stride to its values, with its duration and end', () => {
+    const stride = { start: 1, end: null, interval: 5, duration: 2 };
+    expect(selectedValues(sel('M', [], { stride }), 12)).toEqual([1, 2, 6, 7, 11, 12]);
+    const clipped = { start: 2, end: -1, interval: 5, duration: 1 };
+    expect(selectedValues(sel('D', [], { stride: clipped }), 30)).toEqual([2, 7, 12, 17, 22, 27]);
+    const capped = { start: 0, end: 6, interval: 4, duration: 1 };
+    expect(selectedValues(sel('H', [], { stride: capped }), 23)).toEqual([0, 4]);
+  });
+
+  it('takes an exclusion as the complement, from 0 on the 0-based domains', () => {
+    const wrap = [
+      { start: 22, end: null },
+      { start: null, end: 0 }
+    ];
+    expect(selectedValues(sel('H', wrap, { exclude: true }), 23)).toEqual(
+      Array.from({ length: 21 }, (_, i) => i + 1)
+    );
+    expect(selectedValues(sel('M', [{ start: 2, end: 12 }], { exclude: true }), 12)).toEqual([1]);
   });
 });

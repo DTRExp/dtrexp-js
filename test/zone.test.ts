@@ -46,6 +46,47 @@ describe('evaluation zone — per call', () => {
   });
 });
 
+describe('accepted zone identifiers', () => {
+  const dtr = parse(HOURS);
+
+  it('accepts tz zone and link names in any case, canonicalized', () => {
+    expect(dtr.withZone('US/Eastern').zone).toBe('America/New_York');
+    expect(dtr.withZone('us/eastern').zone).toBe('America/New_York');
+    expect(dtr.withZone('Etc/GMT+5').zone).toBe('Etc/GMT+5');
+    // tz links that look like ICU's legacy IDs but are real tz names
+    for (const tz of ['EST', 'MST', 'HST', 'EST5EDT', 'CST6CDT', 'GMT0', 'Zulu']) {
+      expect(() => dtr.withZone(tz)).not.toThrow();
+    }
+  });
+
+  it('refuses fixed offsets, names only ICU knows and zoneinfo files that name no zone', () => {
+    for (const tz of [
+      '+02:00',
+      '-0500',
+      '+02',
+      'UTC+2',
+      'Z',
+      'posixrules',
+      'Factory',
+      'localtime',
+      'SystemV/AST4',
+      'systemv/est5edt',
+      'Canada/East-Saskatchewan',
+      'US/Pacific-New',
+      // ICU's legacy three-letter IDs, which no tz release has had
+      ...'ACT AET AGT ART AST BET BST CAT CNT CST CTT EAT ECT IET IST JST MIT NET NST PLT PNT PRT PST SST VST'.split(
+        ' '
+      ),
+      'pst',
+      'Ist'
+    ]) {
+      const err = new RangeError(`Unknown time zone: "${tz}"`);
+      expect(() => dtr.withZone(tz)).toThrow(err);
+      expect(() => dtr.covers(T, { tz })).toThrow(err);
+    }
+  });
+});
+
 describe('withZone()', () => {
   const dtr = parse(HOURS);
   const berlin = dtr.withZone('Europe/Berlin');
@@ -156,5 +197,14 @@ describe('immutability', () => {
     expect(Object.isFrozen(expr?.selectors)).toBe(true);
     expect(Object.isFrozen(expr?.selectors[0])).toBe(true);
     expect(Object.isFrozen(expr?.selectors[0]?.spans)).toBe(true);
+  });
+});
+
+describe('the year edge in a zone', () => {
+  it('is the local year: year 1 has not begun in New York at 0001-01-01T00:00Z', () => {
+    const y1 = parse('Y1');
+    expect(y1.covers('0001-01-01T00:00:00Z')).toBe(true);
+    expect(y1.covers('0001-01-01T00:00:00Z', { tz: 'America/New_York' })).toBe(false);
+    expect(y1.covers('0001-01-01T05:00:00Z', { tz: 'America/New_York' })).toBe(true);
   });
 });

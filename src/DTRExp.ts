@@ -13,7 +13,7 @@ import type {
   IIssue,
   IValidationResult
 } from './types/index.js';
-import { resolveZone } from './utils/calendar.js';
+import { daysInMonth, resolveZone } from './utils/calendar.js';
 
 /**
  *  A parsed, immutable DTRExp. Construct via {@link parse}; parse once
@@ -207,11 +207,35 @@ function deepFreeze<T>(value: T): T {
 function toEpochMs(input: DateInput): number {
   if (input instanceof Date) return checkFinite(input.getTime());
   if (typeof input === 'number') return checkFinite(input);
-  if (typeof input === 'string') return checkFinite(Date.parse(input));
+  if (typeof input === 'string') return parseInstant(input);
   if (typeof input === 'object' && input !== null && 'epochMilliseconds' in input) {
     return checkFinite(input.epochMilliseconds);
   }
   throw new TypeError('Expected a Date, epoch milliseconds, ISO 8601 string or Temporal instant');
+}
+
+/**
+ *  An ISO 8601 date anywhere in the string (`Date.parse` reads `' 2020-02-30'` too), and
+ *  its hour. An extended year (`+002021`) matches by its last four digits, which name
+ *  the same leap year: years 10,000 apart are 25 whole 400-year cycles apart.
+ */
+const ISO_DATE = /(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}))?/;
+
+/**
+ *  Reads a string instant. `Date.parse` rolls an impossible date over (`2020-02-30` is
+ *  March 1, `T24:00` the next day); a string instant must be a real date-time, so
+ *  those throw instead.
+ */
+function parseInstant(input: string): number {
+  const ms = checkFinite(Date.parse(input));
+  const iso = ISO_DATE.exec(input);
+  if (
+    iso &&
+    (Number(iso[3]) > daysInMonth(Number(iso[1]), Number(iso[2])) || Number(iso[4]) > 23)
+  ) {
+    throw new TypeError(`Invalid instant: '${input}' is not a real date-time`);
+  }
+  return ms;
 }
 
 function checkFinite(ms: number): number {

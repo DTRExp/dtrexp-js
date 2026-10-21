@@ -1,7 +1,7 @@
 {
-  "spec": 2.9,
+  "spec": 3,
   "tier": "extended",
-  "description": "DTRExp draft-2.9 Extended (Tier 2) vectors. Core conformance is decided by vectors.json alone and is unchanged. An implementation that ships an operation named here (next, covering, intersect) MUST pass that operation's section; one that does not ship it ignores the section. Instants are absolute ISO 8601 UTC; tz is the evaluation zone; every interval is half-open [start, end) written as a two-element array; an expected null means no interval; a null start or end means the interval runs to the edge of the year 1–9999 domain (the implementation's own floor or horizon instant), which the vector does not pin.",
+  "description": "DTRExp draft-3 Extended (Tier 2) vectors. Core conformance is decided by vectors.json alone and is unchanged. An implementation that ships an operation named here (next, covering, intersect) MUST pass that operation's section; one that does not ship it ignores the section. Instants are absolute ISO 8601 UTC; tz is the evaluation zone; every interval is half-open [start, end) written as a two-element array; an expected null means no interval; a null start or end means the interval runs to the edge of the year 1–9999 domain (the implementation's own floor or horizon instant), which the vector does not pin.",
   "next": [
     {
       "id": "next-skips-coverage-in-progress",

@@ -7,6 +7,7 @@ export interface IEpochHolder {
  *  Accepted instant inputs: `Date`, epoch milliseconds, ISO 8601 string, or a
  *  Temporal object. A date-time string without `Z` or an offset
  *  (`'2026-07-07T09:30:00'`) is read in the host's zone, not the evaluation zone,
- *  as `Date.parse` reads it; give strings an offset.
+ *  as `Date.parse` reads it; give strings an offset. A string must be a real
+ *  date-time: `'2020-02-30T00:00:00Z'` throws rather than rolling over to March 1.
  */
 export type DateInput = Date | number | string | IEpochHolder;

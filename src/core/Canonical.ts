@@ -45,8 +45,9 @@ export function toCanonicalString(ir: IDTRExpIR): string {
 
 function renderExpression(expr: IExpressionIR): string {
   const parts: Array<{ order: number; text: string }> = [];
+  const scope = scopeSelector(expr.selectors);
   for (const selector of expr.selectors) {
-    const text = renderSelector(selector);
+    const text = renderSelector(selector, selector === scope);
     if (text) parts.push({ order: ORDER[selector.unit] as number, text });
   }
   if (expr.time) parts.push({ order: ORDER.T as number, text: renderTime(expr.time) });
@@ -59,16 +60,37 @@ function renderExpression(expr: IExpressionIR): string {
   return rendered.join(' ');
 }
 
-function renderSelector(selector: ISelector): string {
+/**
+ *  The full-domain selector that `D` or an `E` ordinal takes its scope from, which the
+ *  canonical form must keep: `D-7:* Y*` is the last 7 days of each year, and dropping
+ *  `Y*` would make it each month's (spec §3). The scope is the nearest of `M`, `Q` and
+ *  `Y` present (spec §2); only a full-domain one is ever at risk of being dropped. A full
+ *  `M` needs keeping only while a `Q` or `Y` that renders would otherwise take its place,
+ *  since the month is the default scope.
+ */
+function scopeSelector(selectors: ISelector[]): ISelector | undefined {
+  if (!selectors.some((s) => s.unit === 'D' || s.ordinal !== undefined)) return undefined;
+  const nearest = ['M', 'Q', 'Y']
+    .map((unit) => selectors.find((s) => s.unit === unit))
+    .find((s) => s !== undefined);
+  const coarser = selectors.some(
+    (s) => (s.unit === 'Q' || s.unit === 'Y') && (s.exclude || !isFullDomain(s))
+  );
+  return nearest?.unit !== 'M' || coarser ? nearest : undefined;
+}
+
+function renderSelector(selector: ISelector, isScope: boolean): string {
   if (selector.stride) {
     const s = selector.stride;
     const end = s.end !== null ? `:${s.end}` : '';
     const duration = s.duration !== 1 ? `/${s.duration}` : '';
     return `${selector.unit}${s.start}${end}/${s.interval}${duration}`;
   }
-  // full-domain plain selectors (`Y*`) are redundant — dropped unless alone.
+  // full-domain plain selectors (`Y*`) are redundant — dropped unless alone or a scope.
   // (an ordinal selector always carries a concrete weekday, so it is never full-domain)
-  if (!selector.exclude && isFullDomain(selector)) return '';
+  if (!selector.exclude && isFullDomain(selector)) return isScope ? `${selector.unit}*` : '';
+  // an exclusion takes a value list, so excluding the whole domain is the range `*:*` (spec §3)
+  if (isFullDomain(selector)) return `${selector.unit}!*:*`;
   const wrap = spanWrap(selector.spans);
   const spans = wrap ? `${wrap.start}:${wrap.end}` : selector.spans.map(renderSpan).join(',');
   const ordinal = selector.ordinal !== undefined ? `#${selector.ordinal}` : '';
@@ -87,7 +109,7 @@ export function spanWrap(spans: ISpan[]): { start: number; end: number } | null 
   // changes never alter the outcome (the alternative candidate fails the same guard).
   const up = spans.find((s) => s.start !== null && s.start > 0 && s.end === null);
   // Stryker disable next-line ConditionalExpression: equivalent — dropping `s.end !== null` only admits
-  // {null, null}, which the parser's star-in-list rejection guarantees never coexists with a second span.
+  // {null, null}, which the parser guarantees never coexists with a second span (it collapses such a list).
   const down = spans.find((s) => s.start === null && s.end !== null && s.end > 0);
   if (up && down && (up.start as number) > (down.end as number)) {
     return { start: up.start as number, end: down.end as number };
@@ -97,14 +119,14 @@ export function spanWrap(spans: ISpan[]): { start: number; end: number } | null 
 
 function isFullDomain(selector: ISelector): boolean {
   // Stryker disable next-line ConditionalExpression: equivalent — spans[0] can only be {null, null} when it
-  // is the sole span (star-in-list is rejected at parse), so multi-span selectors return false either way.
+  // is the sole span (the parser collapses a list holding one to it), so multi-span selectors return false either way.
   if (selector.spans.length !== 1) return false;
   const first = selector.spans[0] as ISpan;
   return first.start === null && first.end === null;
 }
 
+/** A span of a list; a whole-domain `{null, null}` span stands alone and never reaches here. */
 function renderSpan(span: { start: number | null; end: number | null }): string {
-  if (span.start === null && span.end === null) return '*';
   if (span.start === span.end) return String(span.start);
   return `${span.start ?? '*'}:${span.end ?? '*'}`;
 }

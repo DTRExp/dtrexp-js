@@ -56,8 +56,10 @@ describe('toString() — open and excluded spans', () => {
     expect(parse('M*:5').toString()).toBe('M*:5');
   });
 
-  it('renders an exclude-all span verbatim', () => {
-    expect(parse('M!*').toString()).toBe('M!*');
+  it('renders a whole-domain range as the domain, and excluded as `!*:*`', () => {
+    expect(parse('M!*:*').toString()).toBe('M!*:*');
+    expect(parse('M!*:*,5').toString()).toBe('M!*:*');
+    expect(parse('M*:*,5').toString()).toBe('M*');
   });
 });
 

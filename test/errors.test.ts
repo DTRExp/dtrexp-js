@@ -1,43 +1,74 @@
 import { parse, validate } from '../src/index.js';
 import { expectSyntaxError } from './helpers.js';
 
-/** Each entry: expression → expected error code. Covers the paths not in vectors.json. */
-const cases: Array<[string, string]> = [
-  ['T12 T14', 'duplicate-designator'],
-  ['E1:3#2', 'bad-ordinal'],
-  ['E1,2#2', 'bad-ordinal'],
-  ['E*#2', 'bad-ordinal'],
-  ['M!3/2', 'stride-with-exclusion'],
-  ['M-0', 'bad-value'],
-  ['T1200:1200', 'empty-time-range'],
-  ['T123', 'bad-time-value'],
-  ['T093015.25', 'bad-time-value'],
-  ['T2400', 'bad-time-value'],
-  ['T120060', 'bad-time-value'],
-  ['*20180101', 'bad-bounds'],
-  ['2018', 'bad-date-literal'],
-  ['20180101T1', 'bad-date-literal'],
-  ['20180101T2500', 'bad-date-literal'],
-  ['20200101/10D/1M', 'cadence-duration-unit'],
-  ['20200101/0M', 'zero-cadence-period'],
-  ['M-13', 'out-of-domain'],
-  ['E-8', 'out-of-domain'],
-  ['M3:15/2', 'out-of-domain'],
-  ['Y2030:2020', 'backwards-range'],
-  ['M11:2/2', 'stride-on-wrap'],
-  ['20180001', 'bad-date-literal'], // month 0
-  ['20181301', 'bad-date-literal'], // month 13
-  ['20180100', 'bad-date-literal'], // day 0
-  ['20180230', 'bad-date-literal'], // Feb 30 does not exist
-  ['20180301:20170301', 'backwards-bounds'],
-  ['20200101/8D/9D', 'cadence-duration'], // duration >= period
-  ['20200101/10D/1X', 'bad-cadence-unit'],
-  ['Q0', 'out-of-domain'],
-  ['H24', 'out-of-domain'],
-  ['s60', 'out-of-domain'],
-  ['20180101T120060', 'bad-date-literal'], // second 60
-  ['T125960', 'bad-time-value'], // second 60 in a time value
-  ['20200101/2H/120m', 'cadence-duration'] // duration equals period across units
+/**
+ *  Each entry: expression → expected error code and position (spec §8, *Error positions*).
+ *  Covers the paths not in vectors.json.
+ */
+const cases: Array<[string, string, number]> = [
+  ['T12 T14', 'duplicate-designator', 4],
+  ['E1:3#2', 'bad-ordinal', 4],
+  ['E1,2#2', 'bad-ordinal', 4],
+  ['E*#2', 'bad-ordinal', 2],
+  ['M!3/2', 'stride-with-exclusion', 3],
+  ['M-0', 'bad-value', 1],
+  ['T1200:1200', 'empty-time-range', 6],
+  ['T123', 'bad-time-value', 1],
+  ['T093015.25', 'bad-time-value', 1],
+  ['T2400', 'bad-time-value', 1],
+  ['T120060', 'bad-time-value', 1],
+  ['*20180101', 'bad-bounds', 1],
+  ['2018', 'bad-date-literal', 0],
+  ['20180101T1', 'bad-date-literal', 0],
+  ['20180101T2500', 'bad-date-literal', 0],
+  ['20200101/10D/1M', 'cadence-duration-unit', 13],
+  ['20200101/0M', 'zero-cadence-period', 9],
+  ['M-13', 'out-of-domain', 1],
+  ['E-8', 'out-of-domain', 1],
+  ['M3:15/2', 'out-of-domain', 3],
+  ['M13/2', 'out-of-domain', 1],
+  ['Y2030:2020', 'backwards-range', 6],
+  ['Y2030:2020/2', 'backwards-range', 6], // the range is wrong before its stride
+  ['M11:2/2', 'stride-on-wrap', 5],
+  ['20180001', 'bad-date-literal', 0], // month 0
+  ['20181301', 'bad-date-literal', 0], // month 13
+  ['20180100', 'bad-date-literal', 0], // day 0
+  ['20180230', 'bad-date-literal', 0], // Feb 30 does not exist
+  ['M3 00000101', 'bad-date-literal', 3], // year 0
+  ['20180301:20170301', 'backwards-bounds', 9],
+  ['*:00000101', 'bad-date-literal', 2],
+  ['20200101/8D/9D', 'cadence-duration', 12], // duration >= period
+  ['20200101/10D/0D', 'cadence-duration', 13],
+  ['20200101/10D/10D', 'cadence-duration', 13], // same unit, equal length
+  ['20200101/1Y/12M', 'cadence-duration', 12], // mixed units stay conservative
+  ['20200101/13M/1Y', 'cadence-duration', 13], // 366 days ≥ 13 × 28
+  ['20200101/7D/1W', 'cadence-duration', 12],
+  ['20200101/10D/1X', 'bad-cadence-unit', 14],
+  ['Q0', 'out-of-domain', 1],
+  ['H24', 'out-of-domain', 1],
+  ['s60', 'out-of-domain', 1],
+  ['20180101T120060', 'bad-date-literal', 0], // second 60
+  ['T125960', 'bad-time-value', 1], // second 60 in a time value
+  ['20200101/2H/120m', 'cadence-duration', 12], // duration equals period across units
+  ['M1/0', 'stride-interval-min', 3],
+  ['M1/3/0', 'stride-duration', 5],
+  ['E7#-6', 'ordinal-range', 3], // an ordinal's sign belongs to its token
+  ['E7#-0', 'ordinal-zero', 3],
+  ['M-', 'expected-value', 2],
+  ['M*,5', 'star-in-list', 1],
+  ['M!1,*', 'star-in-exclusion', 4],
+  ['M!*/2', 'star-in-exclusion', 2],
+  // the integer limit, in every place an integer stands; a value's token begins at its sign
+  ['M2147483648', 'integer-limit', 1],
+  ['M-2147483648', 'integer-limit', 1],
+  ['D99999999999999999999999', 'integer-limit', 1],
+  ['E7#-2147483648', 'integer-limit', 3],
+  ['M1/2147483648', 'integer-limit', 3],
+  ['M1/2/2147483648', 'integer-limit', 5],
+  ['20200101/1D/2147483648m', 'integer-limit', 12],
+  // only ASCII tokens come before an error, so code points and UTF-16 offsets agree
+  ['M3 😀', 'unexpected-char', 3],
+  ['M1 | M😀', 'expected-value', 6]
 ];
 
 /** Template / readInt messages must retain their interpolated, meaningful text. */
@@ -48,6 +79,9 @@ const messageWords: Array<[string, string]> = [
   ['T2500', 'Hour'],
   ['M3/14', 'exceeds'],
   ['M3 X5', 'Unexpected'],
+  ['M2147483648', 'limit of 2147483647'],
+  ['M!*', "'M!*:*'"],
+  ['M*,5', "'M*'"],
   // readInt `what` labels surface when a required number is missing
   ['M', 'value'],
   ['E7#', 'ordinal'],
@@ -58,13 +92,11 @@ const messageWords: Array<[string, string]> = [
 ];
 
 describe('parser: exhaustive error paths', () => {
-  for (const [expression, code] of cases) {
-    it(`'${expression}' → ${code}`, () => {
+  for (const [expression, code, position] of cases) {
+    it(`'${expression}' → ${code} at ${position}`, () => {
       const err = expectSyntaxError(() => parse(expression));
       expect(err.code).toBe(code);
-      // the reported position lies within the expression
-      expect(err.position).toBeGreaterThanOrEqual(0);
-      expect(err.position).toBeLessThanOrEqual(expression.length);
+      expect(err.position).toBe(position);
     });
   }
 });
@@ -281,5 +313,49 @@ describe('bounds: minute-precision span ends', () => {
   it('runs through the end of the bound minute, and no further', () => {
     expect(parse('*:20240101T1230').covers('2024-01-01T12:30:59Z')).toBe(true);
     expect(parse('*:20240101T1230').covers('2024-01-01T12:31:00Z')).toBe(false);
+  });
+});
+
+describe('parser: forms at the edges of the draft 3 rules that must parse', () => {
+  it('reads leading zeros without limit and the largest integer', () => {
+    expect(parse('M00000000000000000003').toString()).toBe('M3');
+    expect(() => parse('Y1:*/2147483647')).not.toThrow();
+    expect(() => parse('20200101/2147483647m')).not.toThrow();
+    expect(() => parse('20200101/0002147483647D/1D')).not.toThrow();
+  });
+
+  it('accepts `*:*` as a list item at either end, as the whole domain', () => {
+    for (const e of ['M*:*,5', 'M5,*:*']) {
+      expect(parse(e).toString()).toBe('M*');
+      expect(parse(e).covers('2026-01-15T00:00:00Z')).toBe(true);
+    }
+  });
+
+  it('compares mixed-precision bounds by the first start and the last end', () => {
+    // the coarse end's span runs to the end of the day, past the fine start
+    expect(parse('20240101T1800:20240101').covers('2024-01-01T23:59:59Z')).toBe(true);
+    // a second-precision start inside the end's minute (spec §6)
+    expect(parse('20180120T180000:20180120T1800').covers('2018-01-20T18:00:59Z')).toBe(true);
+    expect(() => parse('20240101T1759:20240101T175959')).not.toThrow(); // a one-second window
+  });
+
+  it('compares H and m cadence lengths exactly', () => {
+    expect(() => parse('20200101/61m/1H')).not.toThrow(); // 60 < 61
+    expect(() => parse('20200101/1H/59m')).not.toThrow();
+    expect(() => parse('20200101/1D/1439m')).not.toThrow();
+    expect(validate('20200101/1D/1440m').errors[0]?.code).toBe('cadence-duration');
+  });
+
+  it('compares same-unit cadence lengths exactly', () => {
+    expect(() => parse('20200101/11M/10M')).not.toThrow(); // 10 × 31 days ≥ 11 × 28, yet 10 < 11
+    expect(() => parse('20200101/366Y/365Y')).not.toThrow();
+    expect(() => parse('20200101/2W/13D')).not.toThrow();
+    expect(() => parse('20200101/14M/1Y')).not.toThrow(); // 366 days < 14 × 28
+    expect(() => parse('20200101/8D/1W')).not.toThrow();
+  });
+
+  it('strides a range whose end is 0 only when it does not wrap', () => {
+    expect(() => parse('H0:0/2')).not.toThrow();
+    expect(() => parse('D2:-1/5')).not.toThrow(); // a negative end clips, never wraps
   });
 });

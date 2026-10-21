@@ -2,7 +2,11 @@
 export class DTRExpSyntaxError extends Error {
   /** Stable machine-readable error code (kebab-case). */
   readonly code: string;
-  /** 0-based character offset into the expression, where known. */
+  /**
+   *  The 0-based offset, in code points, of the first character of the token at fault
+   *  (spec §8, *Error positions*). Every character before it is ASCII, so it is also
+   *  the string index.
+   */
   readonly position: number;
   /** The offending expression, verbatim. */
   readonly expression: string;

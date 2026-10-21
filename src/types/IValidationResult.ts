@@ -2,7 +2,10 @@
 export interface IIssue {
   code: string;
   message: string;
-  /** 0-based character offset into the expression, where known. */
+  /**
+   *  The 0-based offset, in code points, of the token at fault (an error) or of the
+   *  component concerned (a warning), per spec §8.
+   */
   position?: number;
 }
 

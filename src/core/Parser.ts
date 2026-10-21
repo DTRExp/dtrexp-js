@@ -13,18 +13,50 @@ import type {
   ITimeRange,
   Unit
 } from '../types/index.js';
-import { daysInMonth, daysInYear, epochDay, weeksInIsoYear } from '../utils/index.js';
+import { daysInMonth, daysInYear, epochDay, quarterOf, weeksInIsoYear } from '../utils/index.js';
 
 const MS_PER_DAY = 86_400_000;
 const SELECTOR_UNITS = 'YQMWDEHms';
 const CADENCE_UNITS = 'YMWDHm';
+/** The largest value an integer may have, however many leading zeros it carries (spec §8). */
+const INTEGER_LIMIT = 2_147_483_647;
 
-/** Conservative day-lengths for the cadence `duration < period` check (spec §5.2). */
-const MAX_DAYS: Record<CadenceUnit, number> = { Y: 366, M: 31, W: 7, D: 1, H: 1 / 24, m: 1 / 1440 };
-const MIN_DAYS: Record<CadenceUnit, number> = { Y: 365, M: 28, W: 7, D: 1, H: 1 / 24, m: 1 / 1440 };
+/**
+ *  Conservative lengths in minutes for the cadence `duration < period` check across
+ *  units (spec §5.2): the longest a duration unit can be and the shortest a period unit
+ *  can be. Whole minutes keep the comparison exact, so `60m` equals `1H`.
+ */
+const MAX_MINUTES: Record<CadenceUnit, number> = {
+  Y: 366 * 1440,
+  M: 31 * 1440,
+  W: 7 * 1440,
+  D: 1440,
+  H: 60,
+  m: 1
+};
+const MIN_MINUTES: Record<CadenceUnit, number> = {
+  Y: 365 * 1440,
+  M: 28 * 1440,
+  W: 7 * 1440,
+  D: 1440,
+  H: 60,
+  m: 1
+};
 
-/** Longest instance of each month across all years, for the unsatisfiability lint. */
-const MONTH_MAX_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+/** The largest value of each fixed-size domain (spec §2); `D` and `W` vary with the calendar. */
+const FIXED_MAX: Partial<Record<Unit, number>> = {
+  Y: 9999,
+  Q: 4,
+  M: 12,
+  E: 7,
+  H: 23,
+  m: 59,
+  s: 59
+};
+/** The day counts each month can have, and each quarter, for the unsatisfiability lint. */
+const MONTH_DAYS = [[31], [28, 29], [31], [30], [31], [30], [31], [31], [30], [31], [30], [31]];
+const QUARTER_DAYS = [[90, 91], [91], [92], [92]];
+const ALL_MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
 export interface IParseResult {
   ir: IDTRExpIR;
@@ -39,6 +71,25 @@ export function parseToIR(source: string): IParseResult {
 interface IPositioned<T> {
   node: T;
   pos: number;
+}
+
+/** Where a span's start and end value tokens begin (the same token for a single value). */
+interface ISpanAt {
+  start: number;
+  end: number;
+}
+
+/** A selector with the positions its static checks report (spec §8, *Error positions*). */
+interface IParsedSelector extends IPositioned<ISelector> {
+  /** Each written span's value tokens, in source order. */
+  at: ISpanAt[];
+  /** A stride's `/` and its interval count. */
+  stride?: { op: number; interval: number };
+}
+
+/** A bounds component, with where its end literal begins. */
+interface IParsedBounds extends IPositioned<IBounds> {
+  end: number;
 }
 
 class Parser {
@@ -68,10 +119,10 @@ class Parser {
 
   private parseExpression(): IExpressionIR {
     const startPos = this.pos;
-    const selectors: IPositioned<ISelector>[] = [];
+    const selectors: IParsedSelector[] = [];
     let time: ITimeRange[] | undefined;
     let cadence: IPositioned<ICadence> | undefined;
-    let bounds: IPositioned<IBounds> | undefined;
+    let bounds: IParsedBounds | undefined;
 
     for (;;) {
       this.skipSpaces();
@@ -81,21 +132,24 @@ class Parser {
         if (time) this.fail('duplicate-designator', 'Duplicate T component', this.pos);
         time = this.parseTime();
       } else if (SELECTOR_UNITS.includes(ch)) {
-        const pos = this.pos;
         const selector = this.parseSelector(ch as Unit);
-        if (selectors.some((s) => s.node.unit === selector.unit)) {
-          this.fail('duplicate-designator', `Duplicate designator '${selector.unit}'`, pos);
+        if (selectors.some((s) => s.node.unit === selector.node.unit)) {
+          this.fail(
+            'duplicate-designator',
+            `Duplicate designator '${selector.node.unit}'`,
+            selector.pos
+          );
         }
-        selectors.push({ node: selector, pos });
+        selectors.push(selector);
       } else if (ch === '*' || isDigit(ch)) {
         const pos = this.pos;
         const parsed = this.parseDateComponent();
-        if ('period' in parsed) {
+        if ('period' in parsed.node) {
           if (cadence) this.fail('duplicate-cadence', 'More than one cadence', pos);
-          cadence = { node: parsed, pos };
+          cadence = { node: parsed.node, pos };
         } else {
           if (bounds) this.fail('duplicate-bounds', 'More than one bounds component', pos);
-          bounds = { node: parsed, pos };
+          bounds = { node: parsed.node, pos, end: parsed.end };
         }
       } else if (ch === '!') {
         this.fail(
@@ -123,54 +177,69 @@ class Parser {
   // discrete selectors
   // -------------------------------
 
-  private parseSelector(unit: Unit): ISelector {
-    const selPos = this.pos;
+  private parseSelector(unit: Unit): IParsedSelector {
+    const pos = this.pos;
     this.pos++;
     let exclude = false;
     if (this.src[this.pos] === '!') {
       exclude = true;
       this.pos++;
     }
-    const spans: ISpan[] = [];
-    const first = this.parseSpan(unit);
-    spans.push(first.span);
+    const items = [this.parseSpan(unit)];
     while (this.src[this.pos] === ',') {
       this.pos++;
-      spans.push(this.parseSpan(unit).span);
+      items.push(this.parseSpan(unit));
     }
-    // a list containing bare `*` is just the whole domain — write `M*` (spec §3)
-    if (spans.length > 1 && spans.some((s) => s.start === null && s.end === null)) {
+    // a bare `*` is the whole domain on its own, never a list item: a list containing it
+    // is just `M*`, and an exclusion takes a value list, so `M!*` excludes nothing
+    // nameable; the range `M*:*` is no bare `*` and may stand in either (spec §3)
+    const bare = items.find((item) => !item.isRange && item.span.start === null);
+    if (bare && exclude) {
+      this.fail(
+        'star-in-exclusion',
+        `An exclusion takes a value list, not a bare '*' — '${unit}!*:*' excludes the whole domain`,
+        bare.at.start
+      );
+    }
+    if (bare && items.length > 1) {
       this.fail(
         'star-in-list',
         `Bare '*' cannot appear in a list — '${unit}*' already covers the domain`,
-        selPos
+        bare.at.start
       );
     }
 
-    const selector: ISelector = { unit, exclude, spans };
+    const first = items[0] as (typeof items)[number];
+    const selector: ISelector = { unit, exclude, spans: items.map((item) => item.span) };
+    const parsed: IParsedSelector = { node: selector, pos, at: items.map((item) => item.at) };
     const next = this.src[this.pos];
     if (next === '#') {
-      if (exclude || spans.length > 1 || first.isRange) {
+      if (exclude || items.length > 1 || first.isRange) {
         this.fail('bad-ordinal', 'Ordinal applies to a single plain value', this.pos);
       }
       selector.ordinal = this.parseOrdinal(unit, first.span);
     } else if (next === '/') {
       if (exclude)
         this.fail('stride-with-exclusion', 'A stride cannot follow an exclusion', this.pos);
-      if (spans.length > 1) this.fail('stride-on-list', 'A stride cannot follow a list', this.pos);
+      if (items.length > 1) this.fail('stride-on-list', 'A stride cannot follow a list', this.pos);
+      const op = this.pos;
       selector.stride = this.parseStrideTail(first.span, first.isRange);
+      parsed.stride = { op, interval: op + 1 };
       selector.spans = [];
     }
-    return selector;
+    return parsed;
   }
 
-  private parseSpan(unit: Unit): { span: ISpan; isRange: boolean } {
+  private parseSpan(unit: Unit): { span: ISpan; isRange: boolean; at: ISpanAt } {
+    const startPos = this.pos;
     const start = this.parseEndpoint(unit);
     if (this.src[this.pos] === ':') {
       this.pos++;
-      return { span: { start, end: this.parseEndpoint(unit) }, isRange: true };
+      const endPos = this.pos;
+      const end = this.parseEndpoint(unit);
+      return { span: { start, end }, isRange: true, at: { start: startPos, end: endPos } };
     }
-    return { span: { start, end: start }, isRange: false };
+    return { span: { start, end: start }, isRange: false, at: { start: startPos, end: startPos } };
   }
 
   private parseEndpoint(unit: Unit): number | null {
@@ -178,14 +247,15 @@ class Parser {
       this.pos++;
       return null;
     }
+    // the value token begins at its sign (spec §8, *Error positions*)
+    const pos = this.pos;
     let sign = 1;
     if (this.src[this.pos] === '-') {
       sign = -1;
       this.pos++;
     }
-    const startPos = this.pos;
-    const value = this.readInt(`a value for '${unit}'`);
-    if (sign === -1 && value === 0) this.fail('bad-value', "'-0' is not a value", startPos);
+    const value = this.readInt(`a value for '${unit}'`, pos);
+    if (sign === -1 && value === 0) this.fail('bad-value', "'-0' is not a value", pos);
     return sign * value;
   }
 
@@ -195,13 +265,13 @@ class Parser {
       this.fail('ordinal-not-weekday', "Ordinal '#' is valid only on 'E'", this.pos - 1);
     if (span.start === null)
       this.fail('bad-ordinal', "Ordinal requires a weekday value, not '*'", this.pos - 1);
+    const pos = this.pos;
     let sign = 1;
     if (this.src[this.pos] === '-') {
       sign = -1;
       this.pos++;
     }
-    const pos = this.pos;
-    const n = this.readInt('an ordinal');
+    const n = this.readInt('an ordinal', pos);
     if (n === 0) this.fail('ordinal-zero', 'Ordinal cannot be zero', pos);
     if (n > 5) this.fail('ordinal-range', 'Ordinal must be within -5…-1 or 1…5', pos);
     return sign * n;
@@ -218,17 +288,21 @@ class Parser {
         opPos
       );
     }
+    const intervalPos = this.pos;
     const interval = this.readInt('a stride interval');
-    if (interval < 2) this.fail('stride-interval-min', 'Stride interval must be at least 2', opPos);
+    if (interval < 2) {
+      this.fail('stride-interval-min', 'Stride interval must be at least 2', intervalPos);
+    }
     let duration = 1;
     if (this.src[this.pos] === '/') {
       this.pos++;
+      const durationPos = this.pos;
       duration = this.readInt('a stride duration');
       if (duration < 1 || duration >= interval) {
         this.fail(
           'stride-duration',
           'Stride duration must be ≥ 1 and smaller than the interval',
-          opPos
+          durationPos
         );
       }
     }
@@ -282,8 +356,7 @@ class Parser {
     if (digits.length === 6 && this.src[this.pos] === '.') {
       this.pos++;
       const frac = this.readDigits();
-      if (frac.length !== 3)
-        this.fail('bad-time-value', 'Milliseconds are exactly 3 digits', this.pos);
+      if (frac.length !== 3) this.fail('bad-time-value', 'Milliseconds are exactly 3 digits', pos);
       msPart = Number(frac);
       unitMs = 1;
     }
@@ -305,27 +378,30 @@ class Parser {
   // date literals: bounds & cadences
   // -------------------------------
 
-  private parseDateComponent(): ICadence | IBounds {
+  private parseDateComponent(): { node: ICadence | IBounds; end: number } {
     if (this.src[this.pos] === '*') {
       this.pos++;
       if (this.src[this.pos] !== ':') this.fail('bad-bounds', "Expected ':' after '*'", this.pos);
       this.pos++;
-      return { start: null, end: this.parseDateLiteral() };
+      const end = this.pos;
+      return { node: { start: null, end: this.parseDateLiteral() }, end };
     }
     const start = this.parseDateLiteral();
     const next = this.src[this.pos];
-    if (next === '/') return this.parseCadenceTail(start);
+    if (next === '/') return { node: this.parseCadenceTail(start), end: this.pos };
     if (next === ':') {
       this.pos++;
+      const end = this.pos;
       if (this.src[this.pos] === '*') {
         this.pos++;
-        return { start, end: null };
+        return { node: { start, end: null }, end };
       }
-      return { start, end: this.parseDateLiteral() };
+      return { node: { start, end: this.parseDateLiteral() }, end };
     }
-    return { start, end: start };
+    return { node: { start, end: start }, end: this.pos };
   }
 
+  /** A date literal is exactly 8 digits, its `T` part included in the token (spec §8). */
   private parseDateLiteral(): IDateLiteral {
     const pos = this.pos;
     const digits = this.readDigits();
@@ -339,10 +415,9 @@ class Parser {
     };
     if (this.src[this.pos] === 'T') {
       this.pos++;
-      const timePos = this.pos;
       const time = this.readDigits();
       if (time.length !== 4 && time.length !== 6) {
-        this.fail('bad-date-literal', 'Date-literal time is Thhmm or Thhmmss', timePos);
+        this.fail('bad-date-literal', 'Date-literal time is Thhmm or Thhmmss', pos);
       }
       literal.hour = Number(time.slice(0, 2));
       literal.minute = Number(time.slice(2, 4));
@@ -353,10 +428,11 @@ class Parser {
         // Stryker disable next-line ConditionalExpression: equivalent — `undefined > 59` is false, so the guard only narrows types.
         (literal.second !== undefined && literal.second > 59)
       ) {
-        this.fail('bad-date-literal', 'Time of day out of range in date literal', timePos);
+        this.fail('bad-date-literal', 'Time of day out of range in date literal', pos);
       }
     }
     if (
+      literal.year < 1 ||
       literal.month < 1 ||
       literal.month > 12 ||
       literal.day < 1 ||
@@ -368,15 +444,20 @@ class Parser {
   }
 
   private parseCadenceTail(anchor: IDateLiteral): ICadence {
-    const opPos = this.pos;
     this.pos++;
+    const periodPos = this.pos;
     const period = this.readInt('a cadence period');
-    if (period < 1) this.fail('zero-cadence-period', 'Cadence period must be at least 1', opPos);
+    if (period < 1) {
+      this.fail('zero-cadence-period', 'Cadence period must be at least 1', periodPos);
+    }
     const periodUnit = this.readCadenceUnit();
     let duration = 1;
     let durationUnit = periodUnit;
+    // an implied duration has no token of its own, so its period answers for it
+    let durationPos = periodPos;
     if (this.src[this.pos] === '/') {
       this.pos++;
+      durationPos = this.pos;
       duration = this.readInt('a cadence duration');
       durationUnit = this.readCadenceUnit();
     }
@@ -385,14 +466,19 @@ class Parser {
       this.fail(
         'cadence-duration-unit',
         'A month/year duration requires a month/year period',
-        opPos
+        durationPos
       );
     }
-    if (duration < 1 || duration * MAX_DAYS[durationUnit] >= period * MIN_DAYS[periodUnit]) {
+    // same-unit lengths compare exactly (`11M/10M`); mixed units conservatively (spec §5.2)
+    const tooLong =
+      durationUnit === periodUnit
+        ? duration >= period
+        : duration * MAX_MINUTES[durationUnit] >= period * MIN_MINUTES[periodUnit];
+    if (duration < 1 || tooLong) {
       this.fail(
         'cadence-duration',
         'Cadence duration must be smaller than its period (a 1-unit period needs an explicit smaller-unit duration)',
-        opPos
+        durationPos
       );
     }
     return { anchor, period, periodUnit, duration, durationUnit };
@@ -413,8 +499,8 @@ class Parser {
   // -------------------------------
 
   private validateExpression(
-    selectors: IPositioned<ISelector>[],
-    bounds: IPositioned<IBounds> | undefined
+    selectors: IParsedSelector[],
+    bounds: IParsedBounds | undefined
   ): void {
     const present = new Set(selectors.map((s) => s.node.unit));
     const dayMax = present.has('M') ? 31 : present.has('Q') ? 92 : present.has('Y') ? 366 : 31;
@@ -439,22 +525,24 @@ class Parser {
       }
     };
 
-    for (const { node, pos } of selectors) {
+    for (const sel of selectors) {
+      const { node } = sel;
       const { min, max } = domain(node.unit);
       const size = max - min + 1;
-      const checkValue = (v: number | null): void => {
+      const checkValue = (v: number | null, at: number): void => {
         if (v === null) return;
         // Y has no edge to count back from (spec §3.1) — negatives are meaningless there
         if (v < 0 && node.unit === 'Y') {
-          this.fail('out-of-domain', `Negative values are not valid for 'Y'`, pos);
+          this.fail('out-of-domain', `Negative values are not valid for 'Y'`, at);
         }
         const ok = v < 0 ? v >= -size : v >= min && v <= max;
-        if (!ok) this.fail('out-of-domain', `Value ${v} out of domain for '${node.unit}'`, pos);
+        if (!ok) this.fail('out-of-domain', `Value ${v} out of domain for '${node.unit}'`, at);
       };
       const spans: ISpan[] = [];
-      for (const span of node.spans) {
-        checkValue(span.start);
-        checkValue(span.end);
+      node.spans.forEach((span, i) => {
+        const at = sel.at[i] as ISpanAt;
+        checkValue(span.start, at.start);
+        checkValue(span.end, at.end);
         if (
           // Stryker disable next-line ConditionalExpression: equivalent — a null start coerces to 0 in `span.start > span.end`, and 0 > end is false for every end that passed `end >= 0`; the guard only narrows types.
           span.start !== null &&
@@ -469,240 +557,123 @@ class Parser {
           // wrap range (spec §3): start → domain edge, plus domain start → end.
           // Y is the one designator with no edge to wrap around.
           if (node.unit === 'Y') {
-            this.fail('backwards-range', `Backwards range in 'Y' — years cannot wrap`, pos);
+            this.fail('backwards-range', `Backwards range in 'Y' — years cannot wrap`, at.end);
           }
           spans.push({ start: span.start, end: null }, { start: null, end: span.end });
         } else {
           spans.push(span);
         }
-      }
-      node.spans = spans;
+      });
+      // `*:*` is the whole domain wherever it stands, so a list holding it is `M*`
+      // (or, excluded, `M!*:*`) — the one shape the rest of the library knows (spec §3.1)
+      node.spans = spans.some((s) => s.start === null && s.end === null)
+        ? [{ start: null, end: null }]
+        : spans;
       if (node.stride) {
-        checkValue(node.stride.start);
-        checkValue(node.stride.end);
+        const at = sel.at[0] as ISpanAt;
+        const { op, interval } = sel.stride as { op: number; interval: number };
+        checkValue(node.stride.start, at.start);
+        checkValue(node.stride.end, at.end);
+        // a literal 0 end wraps like any other on 0-based domains (`H22:0/2`), and wrap
+        // ranges take no stride (spec §3); a backwards `Y` range is wrong before its stride
         if (
-          // Stryker disable next-line ConditionalExpression,LogicalOperator: equivalent — `null > 0` fails on the next line either way.
           node.stride.end !== null &&
-          // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — stride starts are non-negative, so a zero end can never be exceeded... start > 0 requires end < start, and 0-end with positive start is caught identically.
-          node.stride.end > 0 &&
+          node.stride.end >= 0 &&
           node.stride.start > node.stride.end
         ) {
-          this.fail('stride-on-wrap', 'A stride range cannot wrap', pos);
+          if (node.unit === 'Y') {
+            this.fail('backwards-range', `Backwards range in 'Y' — years cannot wrap`, at.end);
+          }
+          this.fail('stride-on-wrap', 'A stride range cannot wrap', op);
         }
         if (node.unit !== 'Y' && node.stride.interval > size) {
           this.fail(
             'stride-interval-domain',
             `Stride interval ${node.stride.interval} exceeds the '${node.unit}' domain — use a cadence`,
-            pos
+            interval
           );
         }
       }
     }
 
-    if (bounds?.node.start && bounds.node.end) {
-      if (literalPseudo(bounds.node.start) > literalPseudo(bounds.node.end)) {
-        this.fail('backwards-bounds', 'Bounds range is backwards', bounds.pos);
-      }
+    // backwards when the first literal's span begins at or after the last one's span
+    // ends; mixed precision compares those two edges, never the two starts (spec §6)
+    if (
+      bounds?.node.start &&
+      bounds.node.end &&
+      literalPseudo(bounds.node.start) >= literalSpanEnd(bounds.node.end)
+    ) {
+      this.fail('backwards-bounds', 'Bounds range is backwards', bounds.end);
     }
-    this.lintUnsatisfiableDay(selectors);
-    this.lintUnsatisfiableMonthQuarter(selectors);
-    this.lintEmptyInvertedRanges(selectors);
-    this.lintUnsatisfiableWeek(selectors);
-    this.lintUnsatisfiableDayOfYear(selectors);
+    this.lintUnsatisfiable(selectors);
   }
 
   /**
-   *  A range with a negative endpoint never wraps (spec §3); it resolves per parent
-   *  instance and covers nothing where resolved start > end. When that is true in
-   *  EVERY instance (`M-2:2`, `D-1:5`), §9.1 says warn.
+   *  The spec §9.1 required minimum, as one test: a selector warns when the values it
+   *  selects are empty in every parent instance its co-present selectors allow, and
+   *  `M` warns when its months miss every selected quarter. Exclusions resolve as
+   *  complements and strides expand to their values, so `M!1:12`, `M1:2/2 Q2`,
+   *  `D-30 M2` and `W53 Y2021:2022/2` all fall out of the same check. The selected
+   *  years narrow `W` and year-scoped `D` whatever their spans (the spec requires it
+   *  over closed spans of at most 1,000 years and allows it beyond), but never `D`
+   *  while `W` makes `Y` the week-year: `D366 W1 Y2025` covers Dec 31 2024.
+   *  At most one warning per expression: once one selector is dead, all of it is.
    */
-  private lintEmptyInvertedRanges(selectors: IPositioned<ISelector>[]): void {
-    const present = new Set(selectors.map((s) => s.node.unit));
-    // smallest and largest instance maximum per unit (D/W vary with the calendar)
-    const instanceMax = (unit: Unit): { min: number; max: number } | null => {
-      switch (unit) {
-        case 'Q':
-          return { min: 4, max: 4 };
-        case 'M':
-          return { min: 12, max: 12 };
-        case 'E':
-          return { min: 7, max: 7 };
-        case 'H':
-          return { min: 23, max: 23 };
-        case 'm':
-        case 's':
-          return { min: 59, max: 59 };
-        case 'W':
-          return { min: 52, max: 53 };
-        case 'D':
-          return present.has('M')
-            ? { min: 28, max: 31 }
-            : present.has('Q')
-              ? { min: 90, max: 92 }
-              : present.has('Y')
-                ? { min: 365, max: 366 }
-                : { min: 28, max: 31 };
-        // Stryker disable next-line ConditionalExpression: equivalent — with the default clause gone the
-        // function returns undefined, and the !edge guard treats undefined and null identically.
-        default:
-          return null; // Y: negatives are already rejected
-      }
-    };
-    for (const { node, pos } of selectors) {
-      if (node.exclude || node.stride) continue;
-      const edge = instanceMax(node.unit);
-      // Stryker disable next-line ConditionalExpression: equivalent — only Y yields null, and every Y span skips below before edge is read (negatives rejected at parse, null endpoints continue).
-      if (!edge) continue;
-      for (const span of node.spans) {
-        // Stryker disable next-line ConditionalExpression,LogicalOperator: equivalent — a null endpoint makes startMin or endMax null, and `null > x` / `x > null` comparisons keep the lint quiet either way.
-        if (span.start === null || span.end === null) continue;
-        // non-negative pairs that survived wrap-splitting are forward ranges (zero ends
-        // wrap like any other literal, spec §3) — never statically empty
-        // Stryker disable next-line ConditionalExpression,EqualityOperator,LogicalOperator: equivalent — non-negative pairs are forward ranges whose startMin never exceeds endMax; scanning them is equally quiet.
-        if (span.start >= 0 && span.end >= 0) continue;
-        const startMin = span.start < 0 ? edge.min + 1 + span.start : span.start;
-        const endMax = span.end < 0 ? edge.max + 1 + span.end : span.end;
-        if (startMin > endMax) {
-          this.warnings.push({
-            code: 'unsatisfiable',
-            message: `Range in '${node.unit}' resolves backwards in every parent instance — this expression covers nothing`,
-            position: pos
-          });
-          return;
-        }
-      }
-    }
-  }
-
-  /** `W53 Y2021` parses, but week-year 2021 has 52 weeks — spec §9.1 says warn. */
-  private lintUnsatisfiableWeek(selectors: IPositioned<ISelector>[]): void {
-    const weekSel = selectors.find((s) => s.node.unit === 'W' && !s.node.exclude);
-    const yearSel = selectors.find((s) => s.node.unit === 'Y' && !s.node.exclude);
-    if (!weekSel || !yearSel || weekSel.node.stride || yearSel.node.stride) return;
-    // only the "every listed week is 53" case is statically decidable
-    const needs53 = weekSel.node.spans.every((s) => s.start === 53 && s.end === 53);
-    if (!needs53) return;
-    let anyLongYear = false;
-    for (const span of yearSel.node.spans) {
-      // Stryker disable next-line ConditionalExpression,EqualityOperator,LogicalOperator: equivalent — an open or over-wide year span either returns early or scans decades, which necessarily contain a 53-week year; both stay quiet.
-      if (span.start === null || span.end === null || span.end - span.start > 1000) return;
-      for (let y = span.start; y <= span.end; y++) {
-        if (weeksInIsoYear(y) === 53) anyLongYear = true;
-      }
-    }
-    if (!anyLongYear) {
+  private lintUnsatisfiable(selectors: IParsedSelector[]): void {
+    const of = (unit: Unit): IParsedSelector | undefined =>
+      selectors.find((s) => s.node.unit === unit);
+    const warn = (sel: IParsedSelector, message: string): void => {
       this.warnings.push({
         code: 'unsatisfiable',
-        message: 'Week 53 never occurs in the selected year(s) — this expression covers nothing',
-        position: weekSel.pos
+        message: `${message} — this expression covers nothing`,
+        position: sel.pos
       });
-    }
-  }
+    };
+    const dead = (sel: IParsedSelector, maxima: Iterable<number>): boolean =>
+      [...maxima].every((max) => selectedValues(sel.node, max).length === 0);
 
-  /** `D366 Y2021` parses, but calendar year 2021 has 365 days — the day-of-year twin of W53 (spec §9.1). */
-  private lintUnsatisfiableDayOfYear(selectors: IPositioned<ISelector>[]): void {
-    const daySel = selectors.find((s) => s.node.unit === 'D' && !s.node.exclude);
-    const yearSel = selectors.find((s) => s.node.unit === 'Y' && !s.node.exclude);
-    if (!daySel || !yearSel || daySel.node.stride || yearSel.node.stride) return;
-    // D is year-scoped only when M/Q are absent (spec §2); with W present, Y is the
-    // week-year while day-of-year stays calendar — cross-selector territory, stays
-    // quiet: D366 W1 Y2025 covers Dec 31 2024 (spec §9.1)
-    if (selectors.some((s) => 'MQW'.includes(s.node.unit))) return;
-    const sizes = new Set<number>();
-    for (const span of yearSel.node.spans) {
-      // Stryker disable next-line ConditionalExpression,EqualityOperator,LogicalOperator: equivalent — an open or over-wide year span either returns early or scans decades, whose size set {365, 366} satisfies every parseable day span; both stay quiet.
-      if (span.start === null || span.end === null || span.end - span.start > 1000) return;
-      for (let y = span.start; y <= span.end; y++) sizes.add(daysInYear(y));
+    for (const sel of selectors) {
+      const max = FIXED_MAX[sel.node.unit];
+      if (max !== undefined && dead(sel, [max])) {
+        return warn(sel, `'${sel.node.unit}' selects no value in its domain`);
+      }
     }
-    // satisfiable iff some span covers a real day in some selected year's domain;
-    // spans were wrap-split at parse, so a start > end pair only arises from
-    // negative endpoints and covers nothing in that instance (spec §3)
-    // Stryker disable next-line EqualityOperator: equivalent — 0 is out of domain for D (rejected at parse), so < and <= coincide.
-    const resolve = (v: number, size: number): number => (v < 0 ? size + 1 + v : v);
-    const satisfiable = [...sizes].some((size) =>
-      daySel.node.spans.some((span) => {
-        // Stryker disable next-line ConditionalExpression: equivalent — a null start resolves to null, and Math.max(null, 1) is the same 1.
-        const lo = span.start === null ? 1 : resolve(span.start, size);
-        const hi = span.end === null ? size : resolve(span.end, size);
-        return Math.max(lo, 1) <= Math.min(hi, size);
-      })
+
+    const month = of('M');
+    const quarter = of('Q');
+    const quarters = quarter ? selectedValues(quarter.node, 4) : [1, 2, 3, 4];
+    const months = (month ? selectedValues(month.node, 12) : ALL_MONTHS).filter((m) =>
+      quarters.includes(quarterOf(m))
     );
-    if (!satisfiable) {
-      this.warnings.push({
-        code: 'unsatisfiable',
-        message:
-          'The selected day(s) of year never occur in the selected year(s) — this expression covers nothing',
-        position: daySel.pos
-      });
+    if (months.length === 0) {
+      return warn(
+        month as IParsedSelector,
+        'The selected month(s) never fall inside the selected quarter(s)'
+      );
     }
-  }
 
-  /** `M-1 Q1` parses but December ∩ Q1 is empty — spec §9.1 says warn, don't error (spec §2). */
-  private lintUnsatisfiableMonthQuarter(selectors: IPositioned<ISelector>[]): void {
-    const monthSel = selectors.find((s) => s.node.unit === 'M' && !s.node.exclude);
-    const quarterSel = selectors.find((s) => s.node.unit === 'Q' && !s.node.exclude);
-    if (!monthSel || !quarterSel || monthSel.node.stride || quarterSel.node.stride) return;
-    // M and Q have fixed domains, so every span resolves statically
-    const resolve = (spans: ISpan[], max: number): Set<number> => {
-      const out = new Set<number>();
-      for (const span of spans) {
-        const at = (v: number | null, edge: number): number =>
-          // Stryker disable next-line EqualityOperator: equivalent — 0 is not a parseable value, so < and <= coincide.
-          v === null ? edge : v < 0 ? max + 1 + v : v;
-        const lo = at(span.start, 1);
-        const hi = at(span.end, max);
-        for (let v = lo; v <= hi; v++) out.add(v);
-      }
-      return out;
-    };
-    const months = resolve(monthSel.node.spans, 12);
-    const quarterMonths = new Set<number>();
-    for (const q of resolve(quarterSel.node.spans, 4)) {
-      quarterMonths
-        .add(q * 3 - 2)
-        .add(q * 3 - 1)
-        .add(q * 3);
+    const year = of('Y');
+    const week = of('W');
+    // the sizes the selected years give a unit, read only where a W or D asks
+    const overYears = (size: (year: number) => number): Set<number> =>
+      sizesOver(selectedValues((year as IParsedSelector).node, 9999), size);
+    if (week && dead(week, year ? overYears(weeksInIsoYear) : [52, 53])) {
+      return warn(week, 'The selected week(s) never occur in the selected year(s)');
     }
-    if (![...months].some((m) => quarterMonths.has(m))) {
-      this.warnings.push({
-        code: 'unsatisfiable',
-        message:
-          'The selected month(s) never fall inside the selected quarter(s) — this expression covers nothing',
-        position: monthSel.pos
-      });
-    }
-  }
 
-  /** `D30 M2` parses but can never match — spec §9.1 says warn, don't error. */
-  private lintUnsatisfiableDay(selectors: IPositioned<ISelector>[]): void {
-    const daySel = selectors.find((s) => s.node.unit === 'D' && !s.node.exclude);
-    const monthSel = selectors.find((s) => s.node.unit === 'M' && !s.node.exclude);
-    if (!daySel || !monthSel || monthSel.node.stride) return;
-    let maxDays = 0;
-    for (const span of monthSel.node.spans) {
-      // Stryker disable next-line ConditionalExpression,LogicalOperator,EqualityOperator: equivalent — proceeding past a null or negative month span indexes MONTH_MAX_DAYS out of range, Math.max yields NaN, and `minDay > NaN` is false: quiet either way.
-      if (span.start === null || span.end === null || span.start < 0 || span.end < 0) return;
-      for (let mo = span.start; mo <= span.end; mo++) {
-        maxDays = Math.max(maxDays, MONTH_MAX_DAYS[mo - 1] as number);
-      }
-    }
-    let minDay: number;
-    if (daySel.node.stride) {
-      // a stride selects nothing below its anchor, and the start is non-negative (spec §3) —
-      // D30:*/2 M2 is as dead as D30 M2 (spec §9.1)
-      minDay = daySel.node.stride.start;
-    } else {
-      const starts = daySel.node.spans.map((s) => s.start);
-      // Stryker disable next-line ConditionalExpression,LogicalOperator,ArrowFunction,MethodExpression,EqualityOperator: equivalent — proceeding with a null or negative start gives Math.min a value ≤ 0, and minDay ≤ 0 never exceeds maxDays: quiet either way.
-      if (starts.some((v) => v === null || v < 0)) return;
-      minDay = Math.min(...(starts as number[]));
-    }
-    if (minDay > maxDays) {
-      this.warnings.push({
-        code: 'unsatisfiable',
-        message: `Day ${minDay} never occurs in the selected month(s) — this expression covers nothing`,
-        position: daySel.pos
-      });
+    const day = of('D');
+    if (!day) return;
+    // D's scope is the nearest of M, Q and Y present, else the month (spec §2)
+    const maxima =
+      month || (!quarter && !year)
+        ? months.flatMap((m) => MONTH_DAYS[m - 1] as number[])
+        : quarter
+          ? quarters.flatMap((q) => QUARTER_DAYS[q - 1] as number[])
+          : week
+            ? [365, 366]
+            : overYears(daysInYear);
+    if (dead(day, new Set(maxima))) {
+      warn(day, 'The selected day(s) never occur in the selected scope');
     }
   }
 
@@ -720,13 +691,26 @@ class Parser {
     return this.src.slice(start, this.pos);
   }
 
-  private readInt(what: string): number {
+  /**
+   *  Reads an integer at the cursor. `tokenPos` is where its token begins when a sign
+   *  leads it; an integer above the limit is an error there (spec §8).
+   */
+  private readInt(what: string, tokenPos = this.pos): number {
     const pos = this.pos;
     const digits = this.readDigits();
     if (digits.length === 0) this.fail('expected-value', `Expected ${what}`, pos);
-    return Number(digits);
+    const value = Number(digits);
+    if (value > INTEGER_LIMIT) {
+      this.fail('integer-limit', `Integer above the limit of ${INTEGER_LIMIT}`, tokenPos);
+    }
+    return value;
   }
 
+  /**
+   *  Spec §8 counts positions in code points, and this one is a UTF-16 index. The two
+   *  agree: the parser steps only over ASCII tokens, so the first character outside
+   *  them is itself the error, and every character before a position is ASCII.
+   */
   private fail(code: string, message: string, position: number): never {
     throw new DTRExpSyntaxError(code, message, this.src, position);
   }
@@ -737,6 +721,50 @@ function isDigit(ch: string | undefined): boolean {
   return ch !== undefined && ch >= '0' && ch <= '9';
 }
 
+/**
+ *  The values a selector picks in one parent instance whose largest value is `max`:
+ *  `*` and negatives resolved against that instance, a stride expanded to its values,
+ *  an exclusion taken as the complement (spec §3, §5.1). Wrap ranges were split at
+ *  parse, so a span whose resolved start passes its end selects nothing there.
+ */
+export function selectedValues(selector: ISelector, max: number): number[] {
+  const min = 'Hms'.includes(selector.unit) ? 0 : 1;
+  const resolve = (v: number | null, edge: number): number =>
+    v === null ? edge : v < 0 ? max + 1 + v : v;
+  const hit = new Uint8Array(max + 1);
+  const stride = selector.stride;
+  if (stride) {
+    const end = Math.min(resolve(stride.end, max), max);
+    for (let v = stride.start; v <= end; v++) {
+      if ((v - stride.start) % stride.interval < stride.duration) hit[v] = 1;
+    }
+  } else {
+    for (const span of selector.spans) {
+      const end = Math.min(resolve(span.end, max), max);
+      for (let v = Math.max(resolve(span.start, min), min); v <= end; v++) hit[v] = 1;
+    }
+  }
+  const out: number[] = [];
+  for (let v = min; v <= max; v++) {
+    if ((hit[v] === 1) !== selector.exclude) out.push(v);
+  }
+  return out;
+}
+
+/**
+ *  The distinct sizes `size` gives the selected years: 52 or 53 weeks, 365 or 366 days.
+ *  There are two at most, so the scan stops once it has both.
+ */
+function sizesOver(years: number[], size: (year: number) => number): Set<number> {
+  const out = new Set<number>();
+  for (const year of years) {
+    out.add(size(year));
+    // Stryker disable next-line ConditionalExpression,EqualityOperator,BlockStatement: equivalent — an early exit only; a size already in the set is never added twice.
+    if (out.size === 2) break;
+  }
+  return out;
+}
+
 /** Comparable local pseudo-epoch of a date literal's start. */
 export function literalPseudo(literal: IDateLiteral): number {
   return (
@@ -745,4 +773,11 @@ export function literalPseudo(literal: IDateLiteral): number {
     (literal.minute ?? 0) * 60_000 +
     (literal.second ?? 0) * 1000
   );
+}
+
+/** End of a literal's span, exclusive: whole day, or minute/second with a T-part (spec §6). */
+export function literalSpanEnd(literal: IDateLiteral): number {
+  const spanMs =
+    literal.hour === undefined ? MS_PER_DAY : literal.second === undefined ? 60_000 : 1000;
+  return literalPseudo(literal) + spanMs;
 }

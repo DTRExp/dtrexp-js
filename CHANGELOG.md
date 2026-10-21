@@ -9,10 +9,28 @@ All notable changes to this project will be documented in this file. The format 
 - Fixed an issue where a tab was accepted as whitespace between components, around `|` and at either end. Spec §1 allows only the ASCII space; a tab is a syntax error now (`M3\tD5`, `\tM3`).
 - Fixed an issue where the zone-name cache, keyed on the name as given, grew without bound when callers passed many spellings of a zone (`'europe/berlin'`, `'EUROPE/BERLIN'`, …). It is cleared after 4096 names.
 - Fixed an issue where `validate()` returned warnings that could be changed, while `parse()` froze the same warnings. Both are frozen now.
+- Fixed an issue where the spec §9.1 warnings were missing on full-domain exclusions (`M!1:12`, `E!1:7`, `M!11:10`, `M!*:*`, `Y!1:9999`), on `D` scoped by `Q` (`D92 Q1`), on negative days their month never has (`D-30 M2`, `D-31 M4`), on ranges whose two negative ends resolve backwards (`D-1:-2`), on months and quarters that miss each other through an exclusion or a stride (`M!4:6 Q2`, `M1:2/2 Q2`), and on strided scopes (`W53 Y2021:2022/2`, `D31 M4:6/2`, `D366 Y2021:2023/2`). Each selector is now checked as the set of values it selects in every parent instance its scope allows; exclusions count as complements and strides as the values they select.
+- Fixed an issue where a stride on a range ending at a literal 0 was accepted (`H22:0/2`, `m30:0/5`); that range wraps, and a wrap range takes no stride.
+- Fixed an issue where `*:*` was rejected as a list item (`M*:*,5`, `M5,*:*`); it is the whole domain, like `M*`.
+- Fixed an issue where `M!*` was accepted; an exclusion takes a value list, so it is a syntax error now. `M!*:*` excludes the whole domain.
+- Fixed an issue where bounds of mixed precision were compared start to start, so `20240101T1800:20240101` was rejected and `20240101T1800:20240101T175959` accepted. The first literal's start is compared with the last literal's end now.
+- Fixed an issue where a cadence's `H` and `m` lengths were compared in fractional days, so `20200101/60m/1H` was accepted though its duration equals its period. Lengths are compared in whole minutes.
+- Fixed an issue where a cadence duration in the same unit as its period was compared with the conservative month and year lengths, so `20200101/11M/10M` and `20200101/366Y/365Y` were rejected. Same-unit lengths compare exactly now, as spec §5.2 says.
+- Fixed an issue where a date literal in year 0 was accepted (`00000101`).
+- Fixed an issue where an integer of any size was accepted where no domain bounds it (a `Y` stride interval, a cadence period or duration). Any integer above 2,147,483,647 is a syntax error at that integer now (code `integer-limit`); leading zeros still don't count.
+- Fixed an issue where `toString()` dropped a `Y*` or `Q*` that sets the scope of `D` or an `E` ordinal, so `D-7:* Y*` became `D-7:*` (each month's last 7 days instead of each year's) and `D366 Y*` became `D366`, which does not parse.
+- Fixed an issue where `toString()` rendered `M!*:*` as `M!*`, which does not parse.
+- Fixed an issue where a string instant that is not a real date-time rolled over to another day: `'2020-02-30T00:00:00Z'` read as March 1, `'2020-01-01T24:00:00Z'` as January 2. It throws `TypeError` now. A date-time string without `Z` or an offset is still read in the host's zone until 2.0.
+- Fixed an issue where a local date before year 1 read as a year 1 or later in a zone west of UTC: `0001-01-01T00:00:00Z` is still 31 December of 1 BCE in New York, so `Y1` does not cover it there.
 
 ### Changed
 
-- The README names both vector files the suite runs, and says that a fixed-offset zone such as `'+01:00'` works where the runtime's `Intl` accepts it.
+- Targets spec draft 3: `SPEC_DRAFT` is `3`, and the suite runs the draft 3 vectors, checking the error position of every rejected expression.
+- Error positions follow spec §8: a syntax error points at the first character of the token at fault. A value out of its domain points at the value (`M13` at 1, not 0), a bad stride or cadence count at that count (`M3/14` at 3), a stride on a wrap range at its `/`, a backwards range at its end, and a malformed date literal at its first digit. Code that reads `position` gets a different number for these.
+- A zone must be a tz database zone or link name, in any case. A fixed offset (`'+02:00'`), ICU's legacy IDs (`'PST'`, `'IST'`), `SystemV/…` names and names the tz database has removed (`'US/Pacific-New'`) throw `RangeError` now, as an unknown zone does.
+- `M!*` and a bare `*` in an exclusion list throw with the code `star-in-exclusion`.
+- The unsatisfiability warnings have new messages, one per expression.
+- The README names both vector files the suite runs, the accepted zone names, where the zone data comes from, and the integer limit.
 
 ## 1.2.0 — 2026-10-20
 

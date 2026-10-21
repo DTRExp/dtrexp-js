@@ -154,6 +154,51 @@ export function fieldsFromCivil(year: number, month: number, day: number): IFiel
   return buildFields(year, month, day, 0, 0, 0, 0);
 }
 
+/**
+ *  Names `Intl` accepts that are not tz database zone or link names: ICU's legacy
+ *  three-letter IDs, and two names the tz database has since removed. Held upper-case,
+ *  since zone names match without regard to case. `SystemV/…` names and fixed offsets
+ *  are refused by their shape instead.
+ */
+const ICU_ONLY_NAMES = new Set([
+  'ACT',
+  'AET',
+  'AGT',
+  'ART',
+  'AST',
+  'BET',
+  'BST',
+  'CAT',
+  'CNT',
+  'CST',
+  'CTT',
+  'EAT',
+  'ECT',
+  'IET',
+  'IST',
+  'JST',
+  'MIT',
+  'NET',
+  'NST',
+  'PLT',
+  'PNT',
+  'PRT',
+  'PST',
+  'SST',
+  'VST',
+  'CANADA/EAST-SASKATCHEWAN',
+  'US/PACIFIC-NEW'
+]);
+
+/**
+ *  Whether `Intl` resolved `tz` as a tz database zone or link name, not as a fixed
+ *  offset (`'+02:00'` resolves to itself) or a name only ICU knows.
+ */
+function isTzName(tz: string, resolved: string): boolean {
+  const name = tz.toUpperCase();
+  return !/^[+-]/.test(resolved) && !name.startsWith('SYSTEMV/') && !ICU_ONLY_NAMES.has(name);
+}
+
 const zoneNames = new Map<string, string>();
 /** Names kept before the cache is cleared; it is keyed on input, which a caller may vary without end. */
 export const ZONE_NAME_CAP = 4096;
@@ -162,8 +207,10 @@ export const ZONE_NAME_CAP = 4096;
  *  The canonical name of an IANA zone as the platform resolves it (`'utc'`,
  *  `'Etc/UTC'` and `'GMT'` → `'UTC'`; `'europe/berlin'` → `'Europe/Berlin'`), so
  *  every alias of UTC takes the fast path and one zone fills one cache entry.
- *  Throws `RangeError` on a zone the platform does not know, and `TypeError` on
- *  anything but a string (`Intl` would read `undefined` as the host's zone).
+ *  The accepted names are the tz database's zone and link names, in any case.
+ *  Throws `RangeError` on anything else: a zone the platform does not know, a fixed
+ *  offset (`'+02:00'`), or a name only ICU knows (`'PST'`, `'SystemV/AST4'`). Throws
+ *  `TypeError` on anything but a string (`Intl` would read `undefined` as the host's zone).
  */
 export function resolveZone(tz: string): string {
   if (typeof tz !== 'string') {
@@ -179,6 +226,7 @@ export function resolveZone(tz: string): string {
     } catch {
       throw new RangeError(`Unknown time zone: "${tz}"`);
     }
+    if (!isTzName(tz, name)) throw new RangeError(`Unknown time zone: "${tz}"`);
     // Stryker disable next-line all: the bound is memory hygiene — resolving again yields the same name
     if (zoneNames.size >= ZONE_NAME_CAP) zoneNames.clear();
     zoneNames.set(tz, name);
@@ -200,7 +248,9 @@ function formatterFor(tz: string): Intl.DateTimeFormat {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
-      hourCycle: 'h23'
+      hourCycle: 'h23',
+      // without it a year before 1 reads as its BCE number: 1 BCE would be year 1
+      era: 'short'
     });
     formatterCache.set(tz, fmt);
   }
@@ -217,8 +267,13 @@ export function fieldsFromInstant(epochMs: number, tz: string): IFields {
   let hour = 0;
   let minute = 0;
   let second = 0;
+  // Stryker disable next-line BooleanLiteral: equivalent — the formatter asks for the era, so every format sets it below.
+  let bce = false;
   for (const part of formatterFor(tz).formatToParts(epochMs)) {
     switch (part.type) {
+      case 'era':
+        bce = part.value === 'BC';
+        break;
       case 'year':
         year = Number(part.value);
         break;
@@ -244,7 +299,8 @@ export function fieldsFromInstant(epochMs: number, tz: string): IFields {
     }
   }
   const ms = ((epochMs % 1000) + 1000) % 1000;
-  return buildFields(year, month, day, hour, minute, second, ms);
+  // proleptic ISO years, as the UTC path reads them: 1 BCE is year 0, 2 BCE year -1
+  return buildFields(bce ? 1 - year : year, month, day, hour, minute, second, ms);
 }
 
 /**

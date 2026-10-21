@@ -80,7 +80,7 @@ parse('D25 M12').toRRule();
 
 | Function | Description |
 | --- | --- |
-| `parse(expression)` | Parses a DTRExp string into an immutable `DTRExp` (frozen at runtime too). Throws `DTRExpSyntaxError` with a stable `code` and character `position` on invalid input. The only way to construct a `DTRExp`. |
+| `parse(expression)` | Parses a DTRExp string into an immutable `DTRExp` (frozen at runtime too). Throws `DTRExpSyntaxError` with a stable `code` and a `position` on invalid input: the 0-based offset, in code points, of the first character of the token at fault, as [spec §8](https://github.com/DTRExp/dtrexp/blob/main/spec.md#8-grammar-ebnf) defines it. The only way to construct a `DTRExp`. |
 | `validate(expression)` | Non-throwing variant. Returns `{ valid, errors, warnings }`; warnings include the spec's *unsatisfiability lint* (`D30 M2` parses but can never match). |
 
 ### `DTRExp` Instance
@@ -95,18 +95,18 @@ parse('D25 M12').toRRule();
 | `covering(instant, opts?)` | The **maximal** covered interval containing `instant`, or `null` when it is not covered (`covers(t)` holds iff `covering(t)` is not `null`). The "applies now, until …" half of a display; `next()` is the "next applies at …" half. Coverage that reaches the edge of the year 1–9999 domain starts or ends there. |
 | `describe(locale?)` | Human-readable English rendering (`'E7#-1 M4'` → *"the last Sunday in April"*). v1 supports `'en'`; the parameter is reserved. |
 | `toRRule()` | RFC 5545 RRULE (+ `DTSTART` line when anchored) for the losslessly-mappable subset, else `null`. Constrained cadences emit RFC 7529 `SKIP=BACKWARD`. |
-| `toString()` | Canonical normalized form (redundant components dropped, canonical order, wraps re-fused). |
+| `toString()` | Canonical normalized form (redundant components dropped, canonical order, wraps re-fused). A `Y*` or `Q*` that sets the scope of `D` or an `E` ordinal stays: `D-7:* Y*` is each year's last 7 days, `D-7:*` each month's. |
 | `warnings` | The spec [§9.1](https://github.com/DTRExp/dtrexp/blob/main/spec.md#91-the-existence-rule) warnings of the parsed expression: same content as `validate().warnings`, so parsing directly doesn't lose them. |
 | `source` | The original expression, verbatim. |
 
 ### Inputs & Options
 
-- **Instants** (`DateInput`): `Date`, epoch milliseconds, ISO 8601 string, or any Temporal-like object exposing `epochMilliseconds` (no Temporal dependency). A date-time string without `Z` or an offset (`'2026-07-07T09:30:00'`) is read in the **host's** zone, as `Date.parse` reads it, not in the evaluation zone; give strings an offset. A later major version will reject them.
-- **`opts.tz`**: IANA time zone for evaluation; default (or `null`) the bound `zone` (`withZone()`), else `'UTC'`. Pass it as `{ tz }`; a bare string throws `TypeError`, and an unknown zone throws `RangeError`. Any zone the runtime's `Intl` accepts works, fixed offsets such as `'+01:00'` included where it accepts them; an IANA name is the portable choice. The zone is always an **evaluation parameter**, never part of the expression; `T0900:1800` means local business hours wherever you evaluate it. DST is handled per [spec §9.3](https://github.com/DTRExp/dtrexp/blob/main/spec.md#93-dst-and-local-time): spring-forward gap times cover nothing; repeated fall-back times are covered on both passes. `intersect()` and `next()` return exactly the instants `covers()` accepts, transition days included: a clock time inside a gap yields no interval, a repeated one yields two.
+- **Instants** (`DateInput`): `Date`, epoch milliseconds, ISO 8601 string, or any Temporal-like object exposing `epochMilliseconds` (no Temporal dependency). A date-time string without `Z` or an offset (`'2026-07-07T09:30:00'`) is read in the **host's** zone, as `Date.parse` reads it, not in the evaluation zone; give strings an offset. A later major version will reject them. A string must be a real date-time: `'2020-02-30T00:00:00Z'` and `'2020-01-01T24:00:00Z'` throw `TypeError` rather than rolling over to the next day.
+- **`opts.tz`**: IANA time zone for evaluation; default (or `null`) the bound `zone` (`withZone()`), else `'UTC'`. Pass it as `{ tz }`; a bare string throws `TypeError`, and an unknown zone throws `RangeError`. The accepted names are the tz database's zone and link names (`'Europe/Berlin'`, `'US/Eastern'`, `'Etc/GMT+5'`), matched without regard to case; anything else is an unknown zone, including a fixed offset (`'+02:00'`), a name only ICU knows (`'PST'`, `'SystemV/AST4'`) and the empty string. The zone rules come from the tz release the Node runtime ships with its ICU data (`process.versions.tz` names it); pin the release by pinning the Node version. The zone is always an **evaluation parameter**, never part of the expression; `T0900:1800` means local business hours wherever you evaluate it. DST is handled per [spec §9.3](https://github.com/DTRExp/dtrexp/blob/main/spec.md#93-dst-and-local-time): spring-forward gap times cover nothing; repeated fall-back times are covered on both passes. `intersect()` and `next()` return exactly the instants `covers()` accepts, transition days included: a clock time inside a gap yields no interval, a repeated one yields two.
 
 **Which to use:** bind the zone with `withZone()` when it belongs to what the expression describes (a store's hours, a venue's schedule), and pass `{ tz }` per call when it belongs to whoever is asking (a rule shown to each user in their own zone). A bound copy shares its `source` with the original, so a cache of parsed expressions keys on `source` and `zone` together.
 
-## Expression Syntax (spec draft 2.9)
+## Expression Syntax (spec draft 3)
 
 The full grammar and semantics live in the **[specification](https://github.com/DTRExp/dtrexp/blob/main/spec.md)**; the essentials:
 
@@ -122,11 +122,11 @@ The full grammar and semantics live in the **[specification](https://github.com/
 | Bounds | `20150101:*`, `*:20291231`, `20180120` | absolute window / single day |
 | Union | `E5#1 \| E5#3` | either expression |
 
-Components in one expression **intersect**; `T0900:1800 E1:5 M!8` reads naturally as *"9–18, on weekdays, except in August."*
+Components in one expression **intersect**; `T0900:1800 E1:5 M!8` reads naturally as *"9–18, on weekdays, except in August."* An integer is at most 2,147,483,647 however many leading zeros it carries (`M0003` is `M3`); a larger one is a syntax error.
 
 ## Quality
 
-- **Conformance-first:** the test suite is driven by the shared [`vectors.json`](https://github.com/DTRExp/dtrexp/blob/main/vectors.json) and [`vectors-extended.json`](https://github.com/DTRExp/dtrexp/blob/main/vectors-extended.json) from the spec repo (the second binds `next()`, `covering()` and `intersect()`): every coverage, rejection, warning and quiet vector, including the calendar traps (Feb 29 in 2000/2024/**2100**, `W53` existence, DST gap/overlap in `Europe/Berlin`, constrain arithmetic on month-end anchors). See [VECTORS.md](https://github.com/DTRExp/dtrexp/blob/main/VECTORS.md) for how the suite works.
+- **Conformance-first:** the test suite is driven by the shared [`vectors.json`](https://github.com/DTRExp/dtrexp/blob/main/vectors.json) and [`vectors-extended.json`](https://github.com/DTRExp/dtrexp/blob/main/vectors-extended.json) from the spec repo, the draft 3 files (the second binds `next()`, `covering()` and `intersect()`): every coverage, rejection (at its error position), warning and quiet vector, including the calendar traps (Feb 29 in 2000/2024/**2100**, `W53` existence, DST gap/overlap in `Europe/Berlin`, constrain arithmetic on month-end anchors). See [VECTORS.md](https://github.com/DTRExp/dtrexp/blob/main/VECTORS.md) for how the suite works.
 - **100% coverage** on all four metrics (lines, statements, functions, branches), enforced as hard thresholds in CI.
 - **100% mutation score** ([Stryker](https://stryker-mutator.io/), `break: 100`): inclusivity mutants (`<` vs `<=`) are exactly the class of bug a date-range library must not ship, and line coverage alone can't catch them.
 - **CI matrix** on Node 20 / 22 / 24 / 26, gate ladder `typecheck → lint → build → cover` plus a dedicated mutation job.

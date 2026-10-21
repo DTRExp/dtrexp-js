@@ -326,3 +326,15 @@ describe('calendar: mutation-hardening — wide-range and boundary behaviour', (
     );
   });
 });
+
+describe('fieldsFromInstant — years before 1', () => {
+  it('reads a BCE local date as its proleptic ISO year, as the UTC path does', () => {
+    // 0001-01-01T00:00Z is still 31 December of 1 BCE (year 0) in New York
+    const nyc = fieldsFromInstant(Date.parse('0001-01-01T00:00:00Z'), 'America/New_York');
+    expect(nyc).toMatchObject({ year: 0, month: 12, day: 31 });
+    expect(fieldsFromInstant(Date.parse('-000001-12-31T12:00:00Z'), 'Europe/Berlin').year).toBe(-1);
+    expect(fieldsFromInstant(Date.parse('0000-12-31T12:00:00Z'), 'UTC').year).toBe(0);
+    // an AD year keeps its number
+    expect(fieldsFromInstant(Date.parse('0001-01-01T12:00:00Z'), 'America/New_York').year).toBe(1);
+  });
+});

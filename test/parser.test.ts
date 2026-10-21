@@ -4,9 +4,9 @@ import { expectSyntaxError } from './helpers.js';
 import vectors from './vectors.json' with { type: 'json' };
 
 describe('parser: conformance — rejection vectors', () => {
-  for (const { expression, reason } of vectors.invalid) {
-    it(`rejects '${expression}' (${reason})`, () => {
-      expectSyntaxError(() => parseToIR(expression));
+  for (const { expression, reason, position } of vectors.invalid) {
+    it(`rejects '${expression}' at ${position} (${reason})`, () => {
+      expect(expectSyntaxError(() => parseToIR(expression)).position).toBe(position);
     });
   }
 });
