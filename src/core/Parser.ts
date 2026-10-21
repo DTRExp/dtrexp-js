@@ -217,32 +217,29 @@ class Parser {
       exclude = true;
       this.pos++;
     }
-    const items = [this.parseSpan(unit)];
-    while (this.src[this.pos] === ',') {
-      this.pos++;
-      items.push(this.parseSpan(unit));
-    }
     // a bare `*` is the whole domain on its own, never a list item: a list containing it
     // is just `M*`, and an exclusion takes a value list, so `M!*` excludes nothing
-    // nameable; the range `M*:*` is no bare `*` and may stand in either (spec §3)
-    const bare = items.find((item) => !item.isRange && item.span.start === null);
-    if (bare && exclude) {
-      this.fail(
-        'star-in-exclusion',
-        `An exclusion takes a value list, not a bare '*' — '${unit}!*:*' excludes the whole domain`,
-        bare.at.start
-      );
-    }
-    if (bare && items.length > 1) {
-      // a leading bare `*` is a whole selector, so it is the `,` after it that cannot follow
-      this.fail(
-        'star-in-list',
-        `Bare '*' cannot appear in a list — '${unit}*' already covers the domain`,
-        bare === items[0] ? bare.at.start + 1 : bare.at.start
-      );
+    // nameable; the range `M*:*` is no bare `*` and may stand in either (spec §3). Each
+    // is decided at the token after the `*`, once it is not `:` (spec §8)
+    const isBare = (item: { span: ISpan; isRange: boolean }): boolean =>
+      !item.isRange && item.span.start === null;
+    const inList = `Bare '*' cannot appear in a list — '${unit}*' already covers the domain`;
+    const inExclusion = `An exclusion takes a value list, not a bare '*' — '${unit}!*:*' excludes the whole domain`;
+    const items = [this.parseSpan(unit)];
+    const first = items[0] as (typeof items)[number];
+    if (exclude && isBare(first)) this.record('star-in-exclusion', inExclusion, first.at.start);
+    // a leading bare `*` is a whole selector, so it is the `,` after it that cannot follow
+    if (this.src[this.pos] === ',' && isBare(first)) this.fail('star-in-list', inList, this.pos);
+    while (this.src[this.pos] === ',') {
+      this.pos++;
+      const item = this.parseSpan(unit);
+      if (isBare(item)) {
+        if (exclude) this.record('star-in-exclusion', inExclusion, item.at.start);
+        else this.record('star-in-list', inList, item.at.start);
+      }
+      items.push(item);
     }
 
-    const first = items[0] as (typeof items)[number];
     const selector: ISelector = { unit, exclude, spans: items.map((item) => item.span) };
     const parsed: IParsedSelector = { node: selector, pos, at: items.map((item) => item.at) };
     const next = this.src[this.pos];
@@ -398,6 +395,8 @@ class Parser {
   private parseTimeValue(isEnd: boolean): { ms: number; unitMs: number } {
     const pos = this.pos;
     const digits = this.readDigits();
+    // a missing value is the grammar's error, decided at once; a malformed one is a rule's
+    if (digits.length === 0) this.fail('expected-value', 'Expected a time value', pos);
     if (digits.length !== 2 && digits.length !== 4 && digits.length !== 6) {
       this.record('bad-time-value', 'Time values are hh, hhmm or hhmmss[.sss]', pos);
     }
@@ -408,13 +407,14 @@ class Parser {
     const ss = digits.length === 6 ? Number(digits.slice(4, 6)) : 0;
     let msPart = 0;
     let unitMs = digits.length === 2 ? 3_600_000 : digits.length === 4 ? 60_000 : 1000;
-    if (digits.length === 6 && this.src[this.pos] === '.') {
-      // the fraction is its own token, from its '.'
+    if (this.src[this.pos] === '.') {
+      // the fraction is its own token, from its '.'; one that is not 3 digits after a
+      // 6-digit value breaks a rule there, so the branch reads on (spec §8)
       const fracPos = this.pos;
       this.pos++;
       const frac = this.readDigits();
-      if (frac.length !== 3)
-        this.record('bad-time-value', 'Milliseconds are exactly 3 digits', fracPos);
+      if (digits.length !== 6 || frac.length !== 3)
+        this.record('bad-time-value', 'Milliseconds are exactly 3 digits after hhmmss', fracPos);
       msPart = Number(frac);
       unitMs = 1;
     }
@@ -468,6 +468,8 @@ class Parser {
   private parseDateLiteral(): IDateLiteral {
     const pos = this.pos;
     const digits = this.readDigits();
+    // a missing literal is the grammar's error, decided at once; a malformed one is a rule's
+    if (digits.length === 0) this.fail('expected-value', 'Expected a date literal', pos);
     if (digits.length !== 8) {
       this.record('bad-date-literal', 'Date literals are YYYYMMDD[Thhmm[ss]]', pos);
     }

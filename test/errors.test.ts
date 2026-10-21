@@ -104,6 +104,27 @@ const cases: Array<[string, string, number]> = [
   ['M1/2147483648', 'integer-limit', 3],
   ['M1/2/2147483648', 'integer-limit', 5],
   ['20200101/1D/2147483648m', 'integer-limit', 12],
+  // a missing T value or date literal is the grammar's error, so it beats a waiting D check
+  ['D40 T', 'expected-value', 5],
+  ['D40 T0900:', 'expected-value', 10],
+  ['D1/40 T', 'expected-value', 7],
+  ['D40 T.5', 'expected-value', 5],
+  ['D40 20200101:', 'expected-value', 13],
+  ['D40 *:', 'expected-value', 6],
+  // a malformed fraction is a rule error at its '.', so the D check competes at the end
+  ['D40 T0900.5', 'out-of-domain', 1],
+  ['D40 T09.', 'out-of-domain', 1],
+  ['T0900.500', 'bad-time-value', 5],
+  ['T09.500 X', 'bad-time-value', 3],
+  // a bare '*' is decided at the token after it, before a later grammar error
+  ['M1,*,X', 'star-in-list', 3],
+  ['M!*,X', 'star-in-exclusion', 2],
+  ['M!1,*,X', 'star-in-exclusion', 4],
+  ['M!*:*,*', 'star-in-exclusion', 6],
+  ['M1,*,*', 'star-in-list', 3],
+  ['D40,*', 'out-of-domain', 1], // a rule error, so the waiting D check competes
+  ['D!40,*', 'out-of-domain', 2],
+  ['D40,*:5,* X', 'star-in-list', 8],
   // only ASCII tokens come before an error, so code points and UTF-16 offsets agree
   ['M3 😀', 'unexpected-char', 3],
   ['M1 | M😀', 'expected-value', 6]
@@ -126,7 +147,12 @@ const messageWords: Array<[string, string]> = [
   ['M1/', 'interval'],
   ['M1/5/', 'duration'],
   ['20200101/', 'period'],
-  ['20200101/5M/', 'duration']
+  ['20200101/5M/', 'duration'],
+  ['T', 'time value'],
+  ['*:', 'date literal'],
+  ['T09.5', 'after hhmmss'],
+  ['M1,*', "'M*'"],
+  ['M!1,*', "'M!*:*'"]
 ];
 
 describe('parser: exhaustive error paths', () => {
@@ -285,8 +311,10 @@ describe('parser: time-value edges', () => {
   });
 
   it('allows fractional seconds only after six digits', () => {
-    expect(validate('T1230.250').errors[0]?.code).toBe('unexpected-char');
-    expect(validate('T12.5').errors[0]?.code).toBe('unexpected-char');
+    // the fraction is a rule error at its '.', not a stray character (spec §8)
+    expect(validate('T1230.250').errors[0]).toMatchObject({ code: 'bad-time-value', position: 5 });
+    expect(validate('T12.5').errors[0]).toMatchObject({ code: 'bad-time-value', position: 3 });
+    expect(validate('T123015.250').errors).toEqual([]);
   });
 
   it('gives 2- and 4-digit values their implied unit interval', () => {
